@@ -130,20 +130,45 @@ class _NicmanagerClient:
         :raises certbot.errors.PluginError: if an error occurs communicating
             with the nicmanager API.
         """
-        zone = self._find_zone(record_name)
-        logger.debug("Creating TXT record %s in zone %s", record_name, zone)
-
         data = {
             "name": record_name.rstrip("."),
             "type": "TXT",
             "value": record_content,
             "ttl": max(ttl, TXT_RECORD_TTL),
         }
-        response = self._request("POST", f"/anycast/{zone}/records", json=data)
-        record_id = self._extract_record_id(response)
-        if record_id is not None:
-            self._created[record_name] = (zone, record_id)
-        logger.info("Successfully added TXT record for %s", record_name)
+
+        # The restricted API-ACME account cannot read zones (zone reads return
+        # 401/403), so the owning zone is discovered by attempting the create
+        # against each candidate, most-specific first, and using the first that
+        # succeeds. A wrong candidate yields 403/404 and we move on; a 401
+        # (genuine auth failure) is never swallowed.
+        candidates = self._candidate_zones(record_name)
+        last_error: errors.PluginError | None = None
+        for zone in candidates:
+            logger.debug("Trying TXT record %s in zone %s", record_name, zone)
+            try:
+                response = self._request("POST", f"/anycast/{zone}/records", json=data)
+            except (_ForbiddenError, _NotFoundError) as e:
+                last_error = e
+                continue
+            record_id = self._extract_record_id(response)
+            if record_id is not None:
+                self._created[record_name] = (zone, record_id)
+            else:
+                logger.warning(
+                    "nicmanager returned no record id for %s; automatic cleanup "
+                    "may not be possible.",
+                    record_name,
+                )
+            logger.info("Created TXT record %s in zone %s", record_name, zone)
+            return
+
+        raise errors.PluginError(
+            f"Could not create the ACME challenge record for {record_name} in any "
+            f"candidate zone ({', '.join(candidates)}). The API-ACME account may "
+            f"not manage this domain; set dns_nicmanager_zone in the credentials "
+            f"file to override zone detection. Last error: {last_error}"
+        )
 
     def del_txt_record(self, record_name: str, record_content: str) -> None:
         """Delete a TXT record using the supplied information.
@@ -157,90 +182,41 @@ class _NicmanagerClient:
         """
         created = self._created.pop(record_name, None)
         if created is None:
-            # We never recorded an id (e.g. the API did not return one). Fall
-            # back to looking the record up so we can still clean it up.
-            try:
-                zone = self._find_zone(record_name)
-                record_id = self._find_record_id(zone, record_name, record_content)
-            except errors.PluginError as e:
-                logger.warning("Could not determine TXT record to delete: %s", e)
-                return
-            if record_id is None:
-                logger.warning(
-                    "TXT record for %s not found; nothing to delete.", record_name
-                )
-                return
-        else:
-            zone, record_id = created
+            # No stored id (creation failed, or the API returned none). The
+            # restricted API-ACME account cannot list records to find it, so
+            # there is nothing safe to do here.
+            logger.warning(
+                "No stored record id for %s; skipping cleanup.", record_name
+            )
+            return
 
+        zone, record_id = created
         try:
             self._request("DELETE", f"/anycast/{zone}/records/{record_id}")
-            logger.info("Successfully deleted TXT record for %s", record_name)
+            logger.info("Deleted TXT record %s (id %s)", record_name, record_id)
         except errors.PluginError as e:
-            logger.warning("Encountered error deleting TXT record: %s", e)
+            logger.warning("Error deleting TXT record %s: %s", record_name, e)
 
     # -- internals ----------------------------------------------------------
 
-    def _find_zone(self, record_name: str) -> str:
-        """Resolve the AnycastDNS zone that owns ``record_name``.
+    def _candidate_zones(self, record_name: str) -> list[str]:
+        """Return the zones to attempt for ``record_name``, most-specific first.
 
-        An explicit ``dns_nicmanager_zone`` always wins. Otherwise the registrable
-        zone is discovered by walking the labels of ``record_name`` from the most
-        specific to the least specific and probing the API for the first zone the
-        configured account can actually see.
+        An explicit ``dns_nicmanager_zone`` short-circuits this. Otherwise the
+        ACME label is stripped and the registrable-domain guesses are returned;
+        single-label public-suffix guesses (no dot) are dropped, as they are
+        never a usable zone here. No API call is made — the restricted API-ACME
+        account cannot read zones, so the owning zone is found by attempting the
+        create against each candidate (see :meth:`add_txt_record`).
         """
         if self.configured_zone:
-            return self.configured_zone
+            return [self.configured_zone]
 
         name = record_name.rstrip(".")
         if name.startswith(ACME_CHALLENGE_PREFIX):
             name = name[len(ACME_CHALLENGE_PREFIX):]
 
-        for candidate in dns_common.base_domain_name_guesses(name):
-            if self._zone_exists(candidate):
-                return candidate
-
-        raise errors.PluginError(
-            f"Unable to determine the nicmanager zone for {record_name}. The "
-            f"configured account may not have access to it, or you can set "
-            f"dns_nicmanager_zone in the credentials file to override zone "
-            f"detection."
-        )
-
-    def _zone_exists(self, zone: str) -> bool:
-        try:
-            self._request("GET", f"/anycast/{zone}")
-            return True
-        except _NotFoundError:
-            return False
-        except _ForbiddenError:
-            # A restricted API-ACME account may be denied zone reads while still
-            # being allowed to write the challenge record. Treat the most
-            # specific guess as authoritative in that case.
-            logger.debug(
-                "Zone read for %s forbidden; assuming this is the target zone.", zone
-            )
-            return True
-
-    def _find_record_id(
-        self, zone: str, record_name: str, record_content: str
-    ) -> int | None:
-        """Look up the numeric id of a TXT record by name and content."""
-        try:
-            response = self._request("GET", f"/anycast/{zone}/records")
-        except errors.PluginError:
-            return None
-        records = response if isinstance(response, list) else response.get("records", [])
-        target = record_name.rstrip(".")
-        for record in records:
-            if (
-                record.get("type") == "TXT"
-                and record.get("name", "").rstrip(".") == target
-                and self._unquote(record.get("content", record.get("value", "")))
-                == record_content
-            ):
-                return record.get("id")
-        return None
+        return [g for g in dns_common.base_domain_name_guesses(name) if "." in g]
 
     @staticmethod
     def _extract_record_id(response: Any) -> int | None:
@@ -249,12 +225,6 @@ class _NicmanagerClient:
             if isinstance(record_id, int):
                 return record_id
         return None
-
-    @staticmethod
-    def _unquote(value: str) -> str:
-        if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-            return value[1:-1]
-        return value
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         url = f"{self.endpoint}{path}"

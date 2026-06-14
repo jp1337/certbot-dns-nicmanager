@@ -47,7 +47,8 @@ token that cannot be supplied unattended.
 
    # nicmanager API credentials used by Certbot
    dns_nicmanager_username = mylogin.acmeuser
-   dns_nicmanager_password = 0123456789abcdef0123456789abcdef
+   # Quote the password if it contains '#' (otherwise read as an INI comment).
+   dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
 
 The path to this file can be provided interactively or using the
 ``--dns-nicmanager-credentials`` command-line argument. Certbot records the path

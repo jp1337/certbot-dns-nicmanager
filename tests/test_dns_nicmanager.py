@@ -82,7 +82,7 @@ class NicmanagerClientTest(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_add_txt_record(self, m):
-        m.get(f"{ENDPOINT}/anycast/{DOMAIN}", status_code=200, json={"name": DOMAIN})
+        # No zone read — the create goes straight to the candidate zone.
         create = m.post(
             f"{ENDPOINT}/anycast/{DOMAIN}/records",
             status_code=202,
@@ -92,6 +92,8 @@ class NicmanagerClientTest(unittest.TestCase):
         self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
 
         self.assertTrue(create.called)
+        # Only the create call was made — no GET zone probing.
+        self.assertEqual(m.call_count, 1)
         body = create.last_request.json()
         self.assertEqual(body["name"], RECORD_NAME)
         self.assertEqual(body["type"], "TXT")
@@ -102,9 +104,11 @@ class NicmanagerClientTest(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_add_txt_record_zone_walk(self, m):
-        # The most specific guess is not a zone; the registrable domain is.
-        m.get(f"{ENDPOINT}/anycast/sub.{DOMAIN}", status_code=404, json={})
-        m.get(f"{ENDPOINT}/anycast/{DOMAIN}", status_code=200, json={"name": DOMAIN})
+        # The most-specific candidate is not a zone (404); the registrable
+        # domain is. The create is retried against the next candidate.
+        miss = m.post(
+            f"{ENDPOINT}/anycast/sub.{DOMAIN}/records", status_code=404, json={}
+        )
         create = m.post(
             f"{ENDPOINT}/anycast/{DOMAIN}/records",
             status_code=202,
@@ -112,18 +116,25 @@ class NicmanagerClientTest(unittest.TestCase):
         )
 
         self.client.add_txt_record("_acme-challenge.sub." + DOMAIN, RECORD_CONTENT, 900)
+        self.assertTrue(miss.called)
         self.assertTrue(create.called)
+        self.assertEqual(self.client._created["_acme-challenge.sub." + DOMAIN][0], DOMAIN)
 
     @requests_mock.Mocker()
-    def test_add_txt_record_forbidden_zone_read_is_tolerated(self, m):
-        # A locked-down API-ACME account may not read the zone but can still write.
-        m.get(f"{ENDPOINT}/anycast/{DOMAIN}", status_code=403, json={})
+    def test_add_txt_record_forbidden_candidate_is_skipped(self, m):
+        # A scoped account gets 403 on a zone it does not own; we try the next.
+        forbidden = m.post(
+            f"{ENDPOINT}/anycast/sub.{DOMAIN}/records",
+            status_code=403,
+            json={"message": "not your zone"},
+        )
         create = m.post(
             f"{ENDPOINT}/anycast/{DOMAIN}/records",
             status_code=202,
             json={"id": RECORD_ID},
         )
-        self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.client.add_txt_record("_acme-challenge.sub." + DOMAIN, RECORD_CONTENT, 900)
+        self.assertTrue(forbidden.called)
         self.assertTrue(create.called)
 
     @requests_mock.Mocker()
@@ -137,29 +148,25 @@ class NicmanagerClientTest(unittest.TestCase):
             json={"id": RECORD_ID},
         )
         client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
-        # No zone discovery requests were made.
+        # Exactly one call: straight to the configured zone, no walking.
         self.assertEqual(create.call_count, 1)
         self.assertEqual(m.call_count, 1)
 
     @requests_mock.Mocker()
-    def test_add_txt_record_auth_error(self, m):
-        m.get(f"{ENDPOINT}/anycast/{DOMAIN}", status_code=200, json={})
+    def test_add_txt_record_auth_error_is_not_swallowed(self, m):
+        # 401 (e.g. bad creds or lockout) must propagate, not trigger a walk.
         m.post(
             f"{ENDPOINT}/anycast/{DOMAIN}/records",
             status_code=401,
-            json={"message": "Unauthorized"},
+            json={"message": "Authorization error"},
         )
         with pytest.raises(errors.PluginError):
             self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
 
     @requests_mock.Mocker()
-    def test_add_txt_record_forbidden_on_write(self, m):
-        m.get(f"{ENDPOINT}/anycast/{DOMAIN}", status_code=200, json={})
-        m.post(
-            f"{ENDPOINT}/anycast/{DOMAIN}/records",
-            status_code=403,
-            json={"message": "API usage not allowed"},
-        )
+    def test_add_txt_record_all_candidates_fail(self, m):
+        # Every candidate returns 403/404 -> a clear PluginError is raised.
+        m.post(f"{ENDPOINT}/anycast/{DOMAIN}/records", status_code=403, json={})
         with pytest.raises(errors.PluginError):
             self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
 
@@ -176,26 +183,11 @@ class NicmanagerClientTest(unittest.TestCase):
         self.assertNotIn(RECORD_NAME, self.client._created)
 
     @requests_mock.Mocker()
-    def test_del_txt_record_lookup_fallback(self, m):
-        # Nothing remembered -> look the record up, then delete it.
-        m.get(f"{ENDPOINT}/anycast/{DOMAIN}", status_code=200, json={"name": DOMAIN})
-        m.get(
-            f"{ENDPOINT}/anycast/{DOMAIN}/records",
-            status_code=200,
-            json=[
-                {
-                    "id": RECORD_ID,
-                    "name": RECORD_NAME,
-                    "type": "TXT",
-                    "content": f'"{RECORD_CONTENT}"',
-                }
-            ],
-        )
-        delete = m.delete(
-            f"{ENDPOINT}/anycast/{DOMAIN}/records/{RECORD_ID}", status_code=202
-        )
+    def test_del_txt_record_without_stored_id_makes_no_request(self, m):
+        # The restricted account cannot list records, so with nothing remembered
+        # cleanup must do nothing rather than fail or probe.
         self.client.del_txt_record(RECORD_NAME, RECORD_CONTENT)
-        self.assertTrue(delete.called)
+        self.assertEqual(m.call_count, 0)
 
     @requests_mock.Mocker()
     def test_del_txt_record_delete_error_is_swallowed(self, m):

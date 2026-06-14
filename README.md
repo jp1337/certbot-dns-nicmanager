@@ -163,6 +163,11 @@ ruff check .    # lint
 mypy certbot_dns_nicmanager
 ```
 
+For the design and the reasoning behind it, see
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the Architecture Decision
+Records in [`docs/decisions/`](docs/decisions/) (DNS-01-only, zone resolution
+without zone reads, and the basic-auth username / cleanup-by-id decisions).
+
 ## License
 
 [Apache License 2.0](LICENSE.txt)

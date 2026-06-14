@@ -1,0 +1,8 @@
+certbot-dns-nicmanager
+Copyright 2026 Jochen Pylypiw
+
+This product includes software developed as an independent, community-maintained
+Certbot DNS plugin for the nicmanager AnycastDNS API.
+
+It is not affiliated with or endorsed by InterNexum GmbH / nicmanager, nor by the
+Electronic Frontier Foundation / the Certbot project.

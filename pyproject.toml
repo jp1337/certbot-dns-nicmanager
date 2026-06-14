@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "certbot-dns-nicmanager"
+version = "0.1.0"
+description = "nicmanager AnycastDNS Authenticator plugin for Certbot"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Jochen Pylypiw" }]
+keywords = ["certbot", "letsencrypt", "acme", "dns-01", "nicmanager", "dns"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Plugins",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Security",
+    "Topic :: System :: Installation/Setup",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "certbot>=2.0.0",
+    "requests>=2.20.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "requests-mock",
+]
+dev = [
+    "build",
+    "twine",
+    "mypy",
+    "types-requests",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/jp1337/certbot-dns-nicmanager"
+Repository = "https://github.com/jp1337/certbot-dns-nicmanager"
+Issues = "https://github.com/jp1337/certbot-dns-nicmanager/issues"
+Changelog = "https://github.com/jp1337/certbot-dns-nicmanager/blob/main/CHANGELOG.md"
+
+# Register the plugin with Certbot's plugin entry-point group.
+[project.entry-points."certbot.plugins"]
+dns-nicmanager = "certbot_dns_nicmanager._internal.dns_nicmanager:Authenticator"
+
+[tool.setuptools]
+packages = ["certbot_dns_nicmanager", "certbot_dns_nicmanager._internal"]
+
+[tool.setuptools.package-data]
+certbot_dns_nicmanager = ["py.typed"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_ignores = true
+warn_redundant_casts = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=certbot_dns_nicmanager --cov-report=term-missing"

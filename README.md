@@ -134,6 +134,22 @@ TTL is fixed at the API minimum of **900 seconds**.
 > the password is correct (and any `#` in it is quoted in the INI, see below)
 > before running at scale.
 
+## Troubleshooting
+
+Common failures, decoded (full details in
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)):
+
+| Response | Meaning | Fix |
+| --- | --- | --- |
+| `401 Authentication error` | Wrong username form or password | Match the username to the account's auth method: **email** for "E-Mail + Passwort" accounts, `login.username` otherwise. Disable 2FA. |
+| `403 API usage not allowed` | Auth OK — API access not enabled | Ask nicmanager support to enable API access for the account. |
+| `401 Too many invalid attempts` / no response (`000`) | IP rate-limited / firewall-blocked after failed logins | Stop and wait. **Never** loop over credential variants — it locks the IP. |
+
+Key gotchas: the username form depends on the account's **active authentication
+method** (email vs `login.username`); **2FA must be off**; a `#` in the password
+must be **quoted** in the INI; and the restricted API-ACME account **cannot read
+zones** (this plugin resolves the zone by create-attempt instead).
+
 ## Development
 
 ```bash

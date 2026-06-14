@@ -1,0 +1,6 @@
+include README.md
+include CHANGELOG.md
+include LICENSE.txt
+include certbot_dns_nicmanager/py.typed
+recursive-include examples *.ini
+recursive-include tests *.py

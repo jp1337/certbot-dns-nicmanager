@@ -67,15 +67,19 @@ Create an INI file, e.g. `~/.secrets/certbot/nicmanager.ini`:
 ```ini
 # nicmanager API credentials used by Certbot
 dns_nicmanager_username = mylogin.acmeuser
-dns_nicmanager_password = 0123456789abcdef0123456789abcdef
+# Quote the password if it contains '#' — an unquoted '#' starts an INI comment.
+dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
 
 # Optional. Defaults to https://api.nicmanager.com/v1
 # dns_nicmanager_endpoint = https://api.nicmanager.com/v1
 
-# Optional. Skip automatic zone detection and always use this zone.
-# Useful for tightly locked-down accounts that cannot read zone metadata.
+# Optional. Skip zone detection and always use this zone.
 # dns_nicmanager_zone = example.com
 ```
+
+The `username` is `login.username` (or the account email). Zone detection works
+without any read access, so `dns_nicmanager_zone` is only needed in unusual
+multi-zone-suffix setups.
 
 The `username` is either `login.username` or the account email address, as
 configured in nicmanager.
@@ -113,15 +117,22 @@ certbot certonly \
 
 1. Certbot asks the plugin to create `_acme-challenge.<domain>` with the
    validation token.
-2. The plugin resolves the owning AnycastDNS zone (most-specific match first;
-   an explicit `dns_nicmanager_zone` short-circuits this), then issues
-   `POST /v1/anycast/<zone>/records` with a `TXT` record.
+2. The plugin determines the owning AnycastDNS zone **without reading it** — a
+   restricted API-ACME account cannot read zones. It tries
+   `POST /v1/anycast/<candidate>/records` against each candidate zone
+   (most-specific first); a `403`/`404` skips to the next candidate, the first
+   `2xx` wins. An explicit `dns_nicmanager_zone` short-circuits this. A `401`
+   (genuine auth failure) is surfaced immediately.
 3. nicmanager returns the new record's numeric `id`, which the plugin
    remembers.
 4. After validation, the plugin removes the record via
    `DELETE /v1/anycast/<zone>/records/<id>`.
 
 TTL is fixed at the API minimum of **900 seconds**.
+
+> **Heads-up:** the API blocks the IP after too many failed logins. Make sure
+> the password is correct (and any `#` in it is quoted in the INI, see below)
+> before running at scale.
 
 ## Development
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "certbot-dns-nicmanager"
-version = "0.2.0"
+version = "1.0.0"
 description = "nicmanager AnycastDNS Authenticator plugin for Certbot"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Jochen Pylypiw" }]
 keywords = ["certbot", "letsencrypt", "acme", "dns-01", "nicmanager", "dns"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Plugins",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",

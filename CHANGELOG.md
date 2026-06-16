@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Cleanup never removed the challenge record.** `_get_client()` built a new API
+  client on every `_perform`/`_cleanup` call, so the record id captured at
+  creation was discarded before cleanup ran — every issuance/renewal left an
+  orphan `_acme-challenge` TXT record. The client is now cached on the
+  authenticator. (Issuance itself was unaffected.)
+- **Wildcard certificates left one orphan TXT record.** For `-d domain -d
+  *.domain` the base and wildcard challenges share a single
+  `_acme-challenge.<domain>` name but use different values (two distinct TXT
+  records); the id map was keyed by name only, so the second create overwrote
+  the first and cleanup could delete only one. The map is now keyed by
+  `(name, value)`.
+
 ### Added
 - Credential validation now rejects a plaintext `http://`
   `dns_nicmanager_endpoint` (credentials are HTTP Basic auth and must use HTTPS).

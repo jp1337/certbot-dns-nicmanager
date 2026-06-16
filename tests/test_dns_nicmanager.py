@@ -115,6 +115,57 @@ class AuthenticatorTest(
         self.auth._setup_credentials()  # noqa: SLF001  (must not raise)
 
 
+class AuthenticatorLifecycleTest(
+    test_util.TempDirTestCase, dns_test_common.BaseAuthenticatorTest
+):
+    """Drive perform() -> cleanup() through the REAL client (HTTP mocked).
+
+    This catches lifecycle bugs that the mocked-client tests above cannot: in
+    particular, that the record created during perform() is actually deleted
+    during cleanup() — which requires the created record id to survive between
+    the two calls.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from certbot_dns_nicmanager._internal.dns_nicmanager import Authenticator
+
+        path = os.path.join(self.tempdir, "credentials.ini")
+        dns_test_common.write(
+            {"nicmanager_username": USERNAME, "nicmanager_password": PASSWORD}, path
+        )
+        self.config = mock.MagicMock(
+            nicmanager_credentials=path, nicmanager_propagation_seconds=0
+        )
+        self.auth = Authenticator(self.config, "nicmanager")
+        notify_patcher = mock.patch("certbot.plugins.dns_common.display_util.notify")
+        notify_patcher.start()
+        self.addCleanup(notify_patcher.stop)
+        self.auth._setup_credentials()  # noqa: SLF001
+
+    @requests_mock.Mocker()
+    def test_cleanup_deletes_record_created_by_perform(self, m):
+        create = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        delete = m.delete(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records/{RECORD_ID}", status_code=202
+        )
+
+        self.auth.perform([self.achall])
+        self.auth._attempt_cleanup = True  # noqa: SLF001
+        self.auth.cleanup([self.achall])
+
+        self.assertTrue(create.called, "perform() must create the TXT record")
+        self.assertTrue(
+            delete.called,
+            "cleanup() must delete the record perform() created "
+            "(the created id has to survive between perform and cleanup)",
+        )
+
+
 class NicmanagerClientTest(unittest.TestCase):
     def setUp(self):
         from certbot_dns_nicmanager._internal.dns_nicmanager import _NicmanagerClient
@@ -142,8 +193,10 @@ class NicmanagerClientTest(unittest.TestCase):
         self.assertEqual(body["type"], "TXT")
         self.assertEqual(body["value"], RECORD_CONTENT)
         self.assertGreaterEqual(body["ttl"], 900)
-        # The created id is remembered for cleanup.
-        self.assertEqual(self.client._created[RECORD_NAME], (DOMAIN, RECORD_ID))
+        # The created id is remembered for cleanup, keyed by (name, value).
+        self.assertEqual(
+            self.client._created[(RECORD_NAME, RECORD_CONTENT)], (DOMAIN, RECORD_ID)
+        )
 
     @requests_mock.Mocker()
     def test_add_txt_record_zone_walk(self, m):
@@ -161,7 +214,7 @@ class NicmanagerClientTest(unittest.TestCase):
         self.client.add_txt_record("_acme-challenge.sub." + DOMAIN, RECORD_CONTENT, 900)
         self.assertTrue(miss.called)
         self.assertTrue(create.called)
-        self.assertEqual(self.client._created["_acme-challenge.sub." + DOMAIN][0], DOMAIN)
+        self.assertEqual(self.client._created[(SUB_RECORD, RECORD_CONTENT)][0], DOMAIN)
 
     @requests_mock.Mocker()
     def test_add_txt_record_forbidden_candidate_is_skipped(self, m):
@@ -239,7 +292,7 @@ class NicmanagerClientTest(unittest.TestCase):
             "certbot_dns_nicmanager._internal.dns_nicmanager", level="WARNING"
         ):
             self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
-        self.assertNotIn(RECORD_NAME, self.client._created)
+        self.assertEqual(self.client._created, {})
 
     @requests_mock.Mocker()
     def test_add_txt_record_network_error_becomes_plugin_error(self, m):
@@ -309,14 +362,37 @@ class NicmanagerClientTest(unittest.TestCase):
     # -- del_txt_record -----------------------------------------------------
 
     @requests_mock.Mocker()
+    def test_two_records_same_name_are_both_cleaned_up(self, m):
+        # Wildcard cert: `-d domain -d *.domain` produces two challenges at the
+        # SAME _acme-challenge.<domain> name but with DIFFERENT values -> two
+        # separate TXT records. Both must be deleted on cleanup.
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [
+                {"status_code": 202, "json": {"id": 111}},
+                {"status_code": 202, "json": {"id": 222}},
+            ],
+        )
+        d1 = m.delete(f"{ENDPOINT}/anycast/{DOMAIN}/records/111", status_code=202)
+        d2 = m.delete(f"{ENDPOINT}/anycast/{DOMAIN}/records/222", status_code=202)
+
+        self.client.add_txt_record(RECORD_NAME, "value-one", 900)
+        self.client.add_txt_record(RECORD_NAME, "value-two", 900)
+        self.client.del_txt_record(RECORD_NAME, "value-one")
+        self.client.del_txt_record(RECORD_NAME, "value-two")
+
+        self.assertTrue(d1.called, "first record (value-one) must be deleted")
+        self.assertTrue(d2.called, "second record (value-two) must be deleted")
+
+    @requests_mock.Mocker()
     def test_del_txt_record_by_remembered_id(self, m):
-        self.client._created[RECORD_NAME] = (DOMAIN, RECORD_ID)
+        self.client._created[(RECORD_NAME, RECORD_CONTENT)] = (DOMAIN, RECORD_ID)
         delete = m.delete(
             f"{ENDPOINT}/anycast/{DOMAIN}/records/{RECORD_ID}", status_code=202
         )
         self.client.del_txt_record(RECORD_NAME, RECORD_CONTENT)
         self.assertTrue(delete.called)
-        self.assertNotIn(RECORD_NAME, self.client._created)
+        self.assertNotIn((RECORD_NAME, RECORD_CONTENT), self.client._created)
 
     @requests_mock.Mocker()
     def test_del_txt_record_without_stored_id_makes_no_request(self, m):
@@ -327,7 +403,7 @@ class NicmanagerClientTest(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_del_txt_record_delete_error_is_swallowed(self, m):
-        self.client._created[RECORD_NAME] = (DOMAIN, RECORD_ID)
+        self.client._created[(RECORD_NAME, RECORD_CONTENT)] = (DOMAIN, RECORD_ID)
         m.delete(
             f"{ENDPOINT}/anycast/{DOMAIN}/records/{RECORD_ID}",
             status_code=500,

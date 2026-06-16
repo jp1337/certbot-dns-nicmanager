@@ -39,6 +39,9 @@ class Authenticator(dns_common.DNSAuthenticator):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.credentials: dns_common.CredentialsConfiguration | None = None
+        # Cached so the record ids captured during _perform survive until
+        # _cleanup (both run on this same Authenticator instance).
+        self._client: _NicmanagerClient | None = None
 
     @classmethod
     def add_parser_arguments(
@@ -93,16 +96,18 @@ class Authenticator(dns_common.DNSAuthenticator):
     def _get_client(self) -> "_NicmanagerClient":
         if self.credentials is None:  # pragma: no cover
             raise errors.Error("Plugin has not been prepared.")
-        username = self.credentials.conf("username")
-        password = self.credentials.conf("password")
-        # Both are guaranteed present by _validate_credentials.
-        assert username is not None and password is not None
-        return _NicmanagerClient(
-            username,
-            password,
-            self.credentials.conf("endpoint") or DEFAULT_ENDPOINT,
-            self.credentials.conf("zone"),
-        )
+        if self._client is None:
+            username = self.credentials.conf("username")
+            password = self.credentials.conf("password")
+            # Both are guaranteed present by _validate_credentials.
+            assert username is not None and password is not None
+            self._client = _NicmanagerClient(
+                username,
+                password,
+                self.credentials.conf("endpoint") or DEFAULT_ENDPOINT,
+                self.credentials.conf("zone"),
+            )
+        return self._client
 
 
 class _NicmanagerClient:
@@ -120,9 +125,12 @@ class _NicmanagerClient:
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(username, password)
         self.session.headers.update({"Accept": "application/json"})
-        # Maps a fully-qualified record name to the (zone, record_id) tuple that
-        # was created for it, so cleanup can delete it again by numeric id.
-        self._created: dict[str, tuple[str, int]] = {}
+        # Maps a (record name, record value) pair to the (zone, record_id) tuple
+        # that was created for it, so cleanup can delete it again by numeric id.
+        # Keying on the value too is required for wildcard certs, where the base
+        # and wildcard challenges share one _acme-challenge.<domain> name but use
+        # different values (two distinct TXT records).
+        self._created: dict[tuple[str, str], tuple[str, int]] = {}
 
     # -- public API ---------------------------------------------------------
 
@@ -160,7 +168,7 @@ class _NicmanagerClient:
                 continue
             record_id = self._extract_record_id(response)
             if record_id is not None:
-                self._created[record_name] = (zone, record_id)
+                self._created[(record_name, record_content)] = (zone, record_id)
             else:
                 logger.warning(
                     "nicmanager returned no record id for %s; automatic cleanup "
@@ -187,7 +195,7 @@ class _NicmanagerClient:
             (typically ``_acme-challenge.<domain>``).
         :param str record_content: The record content (the validation token).
         """
-        created = self._created.pop(record_name, None)
+        created = self._created.pop((record_name, record_content), None)
         if created is None:
             # No stored id (creation failed, or the API returned none). The
             # restricted API-ACME account cannot list records to find it, so

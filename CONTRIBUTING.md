@@ -25,6 +25,12 @@ mypy certbot_dns_nicmanager     # type check
 The tests use `requests-mock`, so they never touch the network or a real
 nicmanager account.
 
+Optionally install the git hooks so these checks run automatically on commit:
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
 ## Guidelines
 
 - Keep the public surface small: only the `Authenticator` class and the plugin

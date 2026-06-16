@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Credential validation now rejects a plaintext `http://`
+  `dns_nicmanager_endpoint` (credentials are HTTP Basic auth and must use HTTPS).
+- `.pre-commit-config.yaml` (ruff, mypy, basic hygiene hooks) and Dependabot
+  config (GitHub Actions + pip).
+- CI coverage gate: `pytest` fails under 85 % coverage.
+
+### Changed
+- CI / publish workflows use `actions/checkout@v5` and `actions/setup-python@v6`
+  (Node 24 runtime).
+
 ## [1.0.0] - 2026-06-16
 
 First stable release. The plugin has been validated in production against the

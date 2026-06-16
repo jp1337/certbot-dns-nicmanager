@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned versions current (and Node20 -> Node24 runtimes).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, ci]
+
+  # Surface new releases of runtime/dev dependencies.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]

@@ -4,6 +4,9 @@
 [![PyPI](https://img.shields.io/pypi/v/certbot-dns-nicmanager.svg)](https://pypi.org/project/certbot-dns-nicmanager/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.txt)
 
+> **Status:** stable (1.0). Running in production — wildcard issuance + automatic
+> renewal against the live nicmanager AnycastDNS API.
+
 A [Certbot](https://certbot.eff.org/) DNS authenticator plugin for
 [nicmanager](https://www.nicmanager.com/) **AnycastDNS**. It automates the
 `dns-01` ACME challenge by creating, and then removing, the

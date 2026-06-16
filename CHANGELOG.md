@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   short-circuit), and rejection of malformed credentials.
 
 ### Changed
-- CI / publish workflows use `actions/checkout@v5` and `actions/setup-python@v6`
-  (Node 24 runtime).
+- CI / publish workflows use `actions/checkout@v6` and `actions/setup-python@v6`
+  (Node 24 runtime); artifact actions bumped to v7/v8.
+- `ci.yml` declares least-privilege `permissions: contents: read` (resolves the
+  CodeQL `actions/missing-workflow-permissions` alerts).
 
 ## [1.0.0] - 2026-06-16
 

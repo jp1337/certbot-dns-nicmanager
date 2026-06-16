@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-16
+
 ### Fixed
 - **Cleanup never removed the challenge record.** `_get_client()` built a new API
   client on every `_perform`/`_cleanup` call, so the record id captured at
@@ -86,7 +88,8 @@ renewal via certbot's systemd timer).
   with a name/content lookup fallback.
 - Test suite covering create, delete, zone walking, and API error handling.
 
-[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jp1337/certbot-dns-nicmanager/releases/tag/v0.1.0

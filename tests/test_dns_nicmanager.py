@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 import pytest
+import requests
 import requests_mock
 from certbot import errors
 from certbot.compat import os
@@ -17,6 +18,7 @@ ENDPOINT = "https://api.nicmanager.com/v1"
 
 # certbot passes the full challenge record name and token through to the plugin.
 RECORD_NAME = "_acme-challenge." + DOMAIN
+SUB_RECORD = "_acme-challenge.sub." + DOMAIN
 RECORD_CONTENT = "token-validation-value"
 RECORD_ID = 16420
 
@@ -81,6 +83,20 @@ class AuthenticatorTest(
             },
             bad,
         )
+        self.config.nicmanager_credentials = bad
+        with pytest.raises(errors.PluginError):
+            self.auth._setup_credentials()  # noqa: SLF001
+
+    def test_setup_credentials_rejects_missing_password(self):
+        bad = os.path.join(self.tempdir, "nopw.ini")
+        dns_test_common.write({"nicmanager_username": USERNAME}, bad)
+        self.config.nicmanager_credentials = bad
+        with pytest.raises(errors.PluginError):
+            self.auth._setup_credentials()  # noqa: SLF001
+
+    def test_setup_credentials_rejects_missing_username(self):
+        bad = os.path.join(self.tempdir, "nouser.ini")
+        dns_test_common.write({"nicmanager_password": PASSWORD}, bad)
         self.config.nicmanager_credentials = bad
         with pytest.raises(errors.PluginError):
             self.auth._setup_credentials()  # noqa: SLF001
@@ -196,6 +212,99 @@ class NicmanagerClientTest(unittest.TestCase):
         m.post(f"{ENDPOINT}/anycast/{DOMAIN}/records", status_code=403, json={})
         with pytest.raises(errors.PluginError):
             self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+
+    # -- edge cases ---------------------------------------------------------
+
+    @requests_mock.Mocker()
+    def test_add_txt_record_clamps_ttl_to_api_minimum(self, m):
+        # nicmanager rejects TTL < 900; a smaller request value is clamped up.
+        create = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 60)
+        self.assertEqual(create.last_request.json()["ttl"], 900)
+
+    @requests_mock.Mocker()
+    def test_add_txt_record_succeeds_without_id_but_stores_nothing(self, m):
+        # 202 with no id in the body: creation counts as done, but nothing is
+        # stored (cleanup will then no-op), and a warning is logged.
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"name": RECORD_NAME, "type": "TXT"},
+        )
+        with self.assertLogs(
+            "certbot_dns_nicmanager._internal.dns_nicmanager", level="WARNING"
+        ):
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertNotIn(RECORD_NAME, self.client._created)
+
+    @requests_mock.Mocker()
+    def test_add_txt_record_network_error_becomes_plugin_error(self, m):
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            exc=requests.exceptions.ConnectionError("boom"),
+        )
+        with pytest.raises(errors.PluginError):
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+
+    @requests_mock.Mocker()
+    def test_add_txt_record_5xx_aborts_and_does_not_walk(self, m):
+        # Only 403/404 mean "wrong zone, try next". A 5xx must abort immediately
+        # and NOT fall through to the parent zone.
+        first = m.post(
+            f"{ENDPOINT}/anycast/sub.{DOMAIN}/records",
+            status_code=500,
+            json={"message": "server error"},
+        )
+        second = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        with pytest.raises(errors.PluginError):
+            self.client.add_txt_record(SUB_RECORD, RECORD_CONTENT, 900)
+        self.assertTrue(first.called)
+        self.assertFalse(second.called)
+
+    @requests_mock.Mocker()
+    def test_add_txt_record_401_after_404_stops_the_walk(self, m):
+        # A 404 continues the walk; a subsequent 401 (auth failure) must abort it.
+        first = m.post(
+            f"{ENDPOINT}/anycast/sub.{DOMAIN}/records", status_code=404, json={}
+        )
+        second = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=401,
+            json={"message": "auth"},
+        )
+        with pytest.raises(errors.PluginError):
+            self.client.add_txt_record(SUB_RECORD, RECORD_CONTENT, 900)
+        self.assertTrue(first.called)
+        self.assertTrue(second.called)
+
+    def test_candidate_zones_strips_prefix_orders_and_drops_single_label(self):
+        # Most-specific first; _acme-challenge stripped; bare TLD dropped.
+        self.assertEqual(
+            self.client._candidate_zones("_acme-challenge.a.b." + DOMAIN),
+            ["a.b." + DOMAIN, "b." + DOMAIN, DOMAIN],
+        )
+
+    def test_candidate_zones_tolerates_trailing_dot(self):
+        self.assertEqual(
+            self.client._candidate_zones("_acme-challenge." + DOMAIN + "."), [DOMAIN]
+        )
+
+    def test_candidate_zones_configured_zone_short_circuits(self):
+        from certbot_dns_nicmanager._internal.dns_nicmanager import _NicmanagerClient
+
+        client = _NicmanagerClient(USERNAME, PASSWORD, ENDPOINT, zone="fixed.example")
+        self.assertEqual(
+            client._candidate_zones("_acme-challenge.anything.else.com"),
+            ["fixed.example"],
+        )
 
     # -- del_txt_record -----------------------------------------------------
 

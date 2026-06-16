@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.pre-commit-config.yaml` (ruff, mypy, basic hygiene hooks) and Dependabot
   config (GitHub Actions + pip).
 - CI coverage gate: `pytest` fails under 85 % coverage.
+- Expanded edge-case tests (now 93 % coverage): TTL clamping to the API minimum,
+  a `202` create response with no `id`, network errors mapped to `PluginError`,
+  zone-walk control semantics (a `5xx` aborts immediately and does **not** walk to
+  the parent zone; a `401` after a `404` stops the walk), `_candidate_zones`
+  generation (prefix strip, ordering, single-label drop, configured-zone
+  short-circuit), and rejection of malformed credentials.
 
 ### Changed
 - CI / publish workflows use `actions/checkout@v5` and `actions/setup-python@v6`

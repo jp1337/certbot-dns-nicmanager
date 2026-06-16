@@ -68,6 +68,13 @@ class Authenticator(dns_common.DNSAuthenticator):
             raise errors.PluginError(
                 f"{credentials.confobj.filename}: dns_nicmanager_password is required."
             )
+        endpoint = credentials.conf("endpoint")
+        if endpoint and not endpoint.lower().startswith("https://"):
+            raise errors.PluginError(
+                f"{credentials.confobj.filename}: dns_nicmanager_endpoint must be an "
+                f"https:// URL (got {endpoint!r}). Credentials are sent as HTTP Basic "
+                f"auth and must never go over plaintext HTTP."
+            )
 
     def _setup_credentials(self) -> None:
         self.credentials = self._configure_credentials(

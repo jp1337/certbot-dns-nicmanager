@@ -48,6 +48,7 @@ dev = [
     "mypy",
     "types-requests",
     "ruff",
+    "pre-commit",
 ]
 
 [project.urls]
@@ -81,4 +82,4 @@ strict_equality = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=certbot_dns_nicmanager --cov-report=term-missing"
+addopts = "--cov=certbot_dns_nicmanager --cov-report=term-missing --cov-fail-under=85"

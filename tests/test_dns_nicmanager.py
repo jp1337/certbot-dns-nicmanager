@@ -71,6 +71,33 @@ class AuthenticatorTest(
         expected = [mock.call.del_txt_record(RECORD_NAME, mock.ANY)]
         self.assertEqual(expected, self.mock_client.mock_calls)
 
+    def test_setup_credentials_rejects_plaintext_endpoint(self):
+        bad = os.path.join(self.tempdir, "bad.ini")
+        dns_test_common.write(
+            {
+                "nicmanager_username": USERNAME,
+                "nicmanager_password": PASSWORD,
+                "nicmanager_endpoint": "http://api.nicmanager.com/v1",
+            },
+            bad,
+        )
+        self.config.nicmanager_credentials = bad
+        with pytest.raises(errors.PluginError):
+            self.auth._setup_credentials()  # noqa: SLF001
+
+    def test_setup_credentials_accepts_https_endpoint(self):
+        good = os.path.join(self.tempdir, "good.ini")
+        dns_test_common.write(
+            {
+                "nicmanager_username": USERNAME,
+                "nicmanager_password": PASSWORD,
+                "nicmanager_endpoint": "https://api.nicmanager.com/v1",
+            },
+            good,
+        )
+        self.config.nicmanager_credentials = good
+        self.auth._setup_credentials()  # noqa: SLF001  (must not raise)
+
 
 class NicmanagerClientTest(unittest.TestCase):
     def setUp(self):

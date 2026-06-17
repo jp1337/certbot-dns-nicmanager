@@ -235,10 +235,17 @@ class _NicmanagerClient:
 
     @staticmethod
     def _extract_record_id(response: Any) -> int | None:
-        if isinstance(response, dict):
-            record_id = response.get("id")
-            if isinstance(record_id, int):
-                return record_id
+        if not isinstance(response, dict):
+            return None
+        record_id = response.get("id")
+        # bool is a subclass of int — reject it explicitly.
+        if isinstance(record_id, bool):
+            return None
+        if isinstance(record_id, int):
+            return record_id
+        # Some APIs serialize numeric ids as strings; accept digit-only strings.
+        if isinstance(record_id, str) and record_id.isdigit():
+            return int(record_id)
         return None
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:

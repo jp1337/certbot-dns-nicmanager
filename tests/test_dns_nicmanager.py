@@ -300,8 +300,9 @@ class NicmanagerClientTest(unittest.TestCase):
             f"{ENDPOINT}/anycast/{DOMAIN}/records",
             exc=requests.exceptions.ConnectionError("boom"),
         )
-        with pytest.raises(errors.PluginError):
-            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        with mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"):
+            with pytest.raises(errors.PluginError):
+                self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
 
     @requests_mock.Mocker()
     def test_add_txt_record_5xx_aborts_and_does_not_walk(self, m):
@@ -379,6 +380,73 @@ class NicmanagerClientTest(unittest.TestCase):
             client._candidate_zones("_acme-challenge.anything.else.com"),
             ["fixed.example"],
         )
+
+    # -- transient retry ----------------------------------------------------
+
+    @requests_mock.Mocker()
+    def test_request_retries_transient_503_then_succeeds(self, m):
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [
+                {"status_code": 503, "json": {"message": "down"}},
+                {"status_code": 202, "json": {"id": RECORD_ID}},
+            ],
+        )
+        with mock.patch(
+            "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+        ) as slept:
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertEqual(
+            self.client._created[(RECORD_NAME, RECORD_CONTENT)], (DOMAIN, RECORD_ID)
+        )
+        slept.assert_called()  # a backoff happened
+
+    @requests_mock.Mocker()
+    def test_request_gives_up_after_persistent_5xx(self, m):
+        post = m.post(f"{ENDPOINT}/anycast/{DOMAIN}/records", status_code=503, json={})
+        with mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"):
+            with pytest.raises(errors.PluginError):
+                self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertEqual(post.call_count, 3)  # MAX_REQUEST_ATTEMPTS
+
+    @requests_mock.Mocker()
+    def test_request_honors_retry_after_on_429(self, m):
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [
+                {"status_code": 429, "headers": {"Retry-After": "7"}, "json": {}},
+                {"status_code": 202, "json": {"id": RECORD_ID}},
+            ],
+        )
+        with mock.patch(
+            "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+        ) as slept:
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        slept.assert_called_once_with(7.0)
+
+    @requests_mock.Mocker()
+    def test_request_retries_connection_error(self, m):
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [
+                {"exc": requests.exceptions.ConnectionError},
+                {"status_code": 202, "json": {"id": RECORD_ID}},
+            ],
+        )
+        with mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"):
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertIn((RECORD_NAME, RECORD_CONTENT), self.client._created)
+
+    @requests_mock.Mocker()
+    def test_request_does_not_retry_401(self, m):
+        post = m.post(f"{ENDPOINT}/anycast/{DOMAIN}/records", status_code=401, json={})
+        with mock.patch(
+            "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+        ) as slept:
+            with pytest.raises(errors.PluginError):
+                self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertEqual(post.call_count, 1)  # no retry on auth failure
+        slept.assert_not_called()
 
     # -- del_txt_record -----------------------------------------------------
 

@@ -51,9 +51,10 @@ Responsibilities:
   a clear `PluginError`.
 - Bridges Certbot's `_perform` / `_cleanup` lifecycle hooks to
   `_NicmanagerClient.add_txt_record` and `del_txt_record`.
-- Constructs a fresh `_NicmanagerClient` per call to `_get_client`, passing
-  username, password, the optional endpoint override, and the optional zone
-  override from the INI.
+- Lazily creates and **caches** a single `_NicmanagerClient` in `_get_client`
+  (built from the INI's username, password, optional endpoint, and optional
+  zone). Caching is required: the record ids captured during `_perform` live on
+  the client and must survive until `_cleanup`.
 
 Key certbot base-class features used:
 

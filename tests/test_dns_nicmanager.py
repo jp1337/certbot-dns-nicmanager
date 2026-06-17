@@ -323,6 +323,27 @@ class NicmanagerClientTest(unittest.TestCase):
         self.assertFalse(second.called)
 
     @requests_mock.Mocker()
+    def test_api_usage_not_allowed_aborts_and_does_not_walk(self, m):
+        # 403 "API usage not allowed" means API access is disabled for the whole
+        # account, NOT "wrong zone". It must abort immediately with a clear error,
+        # not be swallowed as a zone-walk skip (which would burn POSTs and mask
+        # the real cause).
+        sub = m.post(
+            f"{ENDPOINT}/anycast/sub.{DOMAIN}/records",
+            status_code=403,
+            json={"message": "Authorization error: API usage not allowed"},
+        )
+        parent = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        with pytest.raises(errors.PluginError, match="API usage not allowed"):
+            self.client.add_txt_record(SUB_RECORD, RECORD_CONTENT, 900)
+        self.assertTrue(sub.called)
+        self.assertFalse(parent.called, "API-access-denied must not fall through to walk")
+
+    @requests_mock.Mocker()
     def test_add_txt_record_401_after_404_stops_the_walk(self, m):
         # A 404 continues the walk; a subsequent 401 (auth failure) must abort it.
         first = m.post(

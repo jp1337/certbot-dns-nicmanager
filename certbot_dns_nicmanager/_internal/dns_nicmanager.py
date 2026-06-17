@@ -169,13 +169,14 @@ class _NicmanagerClient:
             record_id = self._extract_record_id(response)
             if record_id is not None:
                 self._created[(record_name, record_content)] = (zone, record_id)
+                logger.info("Created TXT record %s in zone %s", record_name, zone)
             else:
                 logger.warning(
-                    "nicmanager returned no record id for %s; automatic cleanup "
-                    "may not be possible.",
+                    "Created TXT record %s in zone %s, but nicmanager returned no "
+                    "id; automatic cleanup will not be possible.",
                     record_name,
+                    zone,
                 )
-            logger.info("Created TXT record %s in zone %s", record_name, zone)
             return
 
         raise errors.PluginError(
@@ -195,7 +196,8 @@ class _NicmanagerClient:
             (typically ``_acme-challenge.<domain>``).
         :param str record_content: The record content (the validation token).
         """
-        created = self._created.pop((record_name, record_content), None)
+        key = (record_name, record_content)
+        created = self._created.get(key)
         if created is None:
             # No stored id (creation failed, or the API returned none). The
             # restricted API-ACME account cannot list records to find it, so
@@ -208,9 +210,25 @@ class _NicmanagerClient:
         zone, record_id = created
         try:
             self._request("DELETE", f"/anycast/{zone}/records/{record_id}")
-            logger.info("Deleted TXT record %s (id %s)", record_name, record_id)
+        except _NotFoundError:
+            # Already gone (double cleanup / removed elsewhere) — treat as done.
+            logger.info("TXT record %s (id %s) was already gone.", record_name, record_id)
         except errors.PluginError as e:
-            logger.warning("Error deleting TXT record %s: %s", record_name, e)
+            # Keep the id so a later attempt can still find it, and log enough
+            # (zone + id) to locate the orphan for manual removal.
+            logger.warning(
+                "Could not delete TXT record %s in zone %s (id %s): %s — it may "
+                "need manual removal.",
+                record_name,
+                zone,
+                record_id,
+                e,
+            )
+            return
+        else:
+            logger.info("Deleted TXT record %s (id %s).", record_name, record_id)
+        # Remove from the map only once we know it is gone.
+        self._created.pop(key, None)
 
     # -- internals ----------------------------------------------------------
 
@@ -281,6 +299,17 @@ class _NicmanagerClient:
                 f"two-factor authentication is disabled on the account. {detail}"
             )
         if status == 403:
+            # A 403 means either "this account does not own this zone" (a
+            # legitimate zone-walk skip) OR "API access is not enabled for the
+            # account at all". The latter is account-wide, not zone-specific, so
+            # it must abort immediately rather than be retried against every
+            # candidate zone (which masks the cause and burns requests).
+            if "usage not allowed" in detail.lower():
+                raise errors.PluginError(
+                    f"nicmanager API access is not enabled for this account "
+                    f"(HTTP 403: {detail}). Enable API usage in the nicmanager "
+                    f"portal ({ACCOUNT_URL}) or contact support; see {DOCS_URL}."
+                )
             raise _ForbiddenError(
                 f"nicmanager API denied the request (HTTP 403): {detail} The "
                 f"account must be permitted to manage the _acme-challenge TXT "

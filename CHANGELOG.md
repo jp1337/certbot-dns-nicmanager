@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Accept a string-typed record `id` in the create response (coerced to int), so
+  cleanup can still delete the record if the API serializes the id as a string.
+  A `bool` id is rejected explicitly. (Previously a non-int id was silently
+  dropped, orphaning the record.)
+
 ## [1.0.1] - 2026-06-16
 
 ### Fixed

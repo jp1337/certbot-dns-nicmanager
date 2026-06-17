@@ -385,6 +385,29 @@ class NicmanagerClientTest(unittest.TestCase):
         self.assertTrue(d2.called, "second record (value-two) must be deleted")
 
     @requests_mock.Mocker()
+    def test_add_txt_record_accepts_string_id_so_cleanup_works(self, m):
+        # Defensive: if the API returns the id as a string, cleanup must still
+        # be able to delete by it (otherwise the record is silently orphaned).
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": "777"},
+        )
+        delete = m.delete(f"{ENDPOINT}/anycast/{DOMAIN}/records/777", status_code=202)
+        self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.client.del_txt_record(RECORD_NAME, RECORD_CONTENT)
+        self.assertTrue(delete.called, "a string id must still allow cleanup")
+
+    @requests_mock.Mocker()
+    def test_del_txt_record_swallows_404_already_gone(self, m):
+        # Record already removed (double cleanup / external deletion): idempotent.
+        self.client._created[(RECORD_NAME, RECORD_CONTENT)] = (DOMAIN, RECORD_ID)
+        m.delete(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records/{RECORD_ID}", status_code=404, json={}
+        )
+        self.client.del_txt_record(RECORD_NAME, RECORD_CONTENT)  # must not raise
+
+    @requests_mock.Mocker()
     def test_del_txt_record_by_remembered_id(self, m):
         self.client._created[(RECORD_NAME, RECORD_CONTENT)] = (DOMAIN, RECORD_ID)
         delete = m.delete(

@@ -7,11 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-06-17
+
+Hardening release from a multi-level review (peer + security + reliability).
+
 ### Fixed
-- Accept a string-typed record `id` in the create response (coerced to int), so
-  cleanup can still delete the record if the API serializes the id as a string.
-  A `bool` id is rejected explicitly. (Previously a non-int id was silently
-  dropped, orphaning the record.)
+- **`403 "API usage not allowed"` is no longer swallowed by the zone walk.** This
+  account-wide condition was treated as "wrong zone" and retried against every
+  candidate, masking the cause and burning requests. It now aborts immediately
+  with a clear "enable API access" message; an ordinary 403 still walks.
+- **Cleanup is durable.** `del_txt_record` no longer removes the stored record id
+  *before* the DELETE — on a transient failure the id is kept (logged with
+  zone + id) so the record isn't silently lost; a `404` (already gone) counts as
+  cleaned up.
+- Accept a string-typed record `id` in the create response (coerced to int;
+  `bool` rejected), so cleanup still works if the API serializes the id as a
+  string.
+- The "Created TXT record" info log now fires only on actual success.
+
+### Added
+- **Bounded retry with backoff** for transient failures (connection errors,
+  timeouts, `429`, `502/503/504`). `429` honours `Retry-After`. Auth/zone
+  responses (`401/403/404`) are **never** retried, so retries can't amplify
+  toward the API's failed-login firewall block.
+
+### Changed
+- Dependency floor `requests>=2.32.0` (hygiene).
+
+### Notes
+- DNS propagation uses certbot's standard fixed wait
+  (`--dns-nicmanager-propagation-seconds`, default 60), as with other certbot
+  DNS plugins; active authoritative-NS polling was considered and deferred to
+  avoid a `dnspython` dependency for marginal gain.
 
 ## [1.0.1] - 2026-06-16
 
@@ -94,7 +121,8 @@ renewal via certbot's systemd timer).
   with a name/content lookup fallback.
 - Test suite covering create, delete, zone walking, and API error handling.
 
-[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v0.1.0...v0.2.0

@@ -1,5 +1,6 @@
 """DNS Authenticator for nicmanager AnycastDNS."""
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -22,6 +23,14 @@ TXT_RECORD_TTL = 900
 
 ACCOUNT_URL = "https://cp.nicmanager.com/"
 DOCS_URL = "https://api.nicmanager.com/docs/v1/"
+
+# Transient HTTP statuses worth a bounded retry. 4xx (auth/zone) is NEVER
+# retried — retrying 401/403 would just walk toward the API's firewall block.
+RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
+MAX_REQUEST_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 2.0
+RETRY_BACKOFF_CAP_SECONDS = 30.0
+RETRY_AFTER_CAP_SECONDS = 60.0
 
 
 class Authenticator(dns_common.DNSAuthenticator):
@@ -268,13 +277,36 @@ class _NicmanagerClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         url = f"{self.endpoint}{path}"
-        try:
-            response = self.session.request(method, url, timeout=30, **kwargs)
-        except requests.exceptions.RequestException as e:
-            raise errors.PluginError(
-                f"Error communicating with the nicmanager API: {e}"
-            ) from e
+        response = None
+        for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+            try:
+                response = self.session.request(method, url, timeout=30, **kwargs)
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as e:
+                # Transient network error — retry a few times, then give up.
+                if attempt < MAX_REQUEST_ATTEMPTS:
+                    self._backoff(attempt)
+                    continue
+                raise errors.PluginError(
+                    f"Error communicating with the nicmanager API: {e}"
+                ) from e
+            except requests.exceptions.RequestException as e:
+                raise errors.PluginError(
+                    f"Error communicating with the nicmanager API: {e}"
+                ) from e
 
+            # Retry transient server/throttle responses; never retry 4xx.
+            if (
+                response.status_code in RETRYABLE_STATUS
+                and attempt < MAX_REQUEST_ATTEMPTS
+            ):
+                self._backoff(attempt, response)
+                continue
+            break
+
+        assert response is not None  # the loop always assigns or raises
         self._raise_for_status(response, method, path)
 
         if not response.content:
@@ -283,6 +315,21 @@ class _NicmanagerClient:
             return response.json()
         except ValueError:
             return None
+
+    @staticmethod
+    def _backoff(attempt: int, response: requests.Response | None = None) -> None:
+        """Sleep before a retry: honour Retry-After on 429, else exponential."""
+        delay = min(
+            RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)), RETRY_BACKOFF_CAP_SECONDS
+        )
+        if response is not None:
+            retry_after = response.headers.get("Retry-After", "")
+            if retry_after.isdigit():
+                delay = min(float(retry_after), RETRY_AFTER_CAP_SECONDS)
+        logger.debug(
+            "Retrying nicmanager API request in %.1fs (attempt %d)", delay, attempt
+        )
+        time.sleep(delay)
 
     @staticmethod
     def _raise_for_status(response: requests.Response, method: str, path: str) -> None:

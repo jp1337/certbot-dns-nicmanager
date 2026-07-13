@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-13
+
+### Added
+- **Two-factor authentication (TOTP) support.** A new optional credential,
+  `dns_nicmanager_totp_secret` (base32), makes the plugin send a rotating code in
+  the `X-Auth-Token` header on every request, as the API requires for 2FA-enabled
+  accounts. A fresh code is minted per request attempt (so a retry crossing a
+  30-second window still carries a valid code); the API accepts reuse within a
+  window, so no wait-for-next-window logic is needed. The secret may be given in
+  the portal's space-grouped form. Unset ⇒ unchanged behaviour for accounts
+  without 2FA. Requires an accurate host clock (NTP): a skewed clock yields
+  invalid codes, and repeated invalid codes get the account throttled.
+
+### Changed
+- The `401` error message now points at `dns_nicmanager_totp_secret` and clock
+  sync instead of telling the operator to disable 2FA.
+- New dependency `pyotp>=2.9.0`.
+
 ## [1.0.2] - 2026-06-17
 
 Hardening release from a multi-level review (peer + security + reliability).
@@ -121,7 +139,8 @@ renewal via certbot's systemd timer).
   with a name/content lookup fallback.
 - Test suite covering create, delete, zone walking, and API error handling.
 
-[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v0.2.0...v1.0.0

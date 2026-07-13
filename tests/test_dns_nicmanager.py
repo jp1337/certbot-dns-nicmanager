@@ -21,6 +21,8 @@ RECORD_NAME = "_acme-challenge." + DOMAIN
 SUB_RECORD = "_acme-challenge.sub." + DOMAIN
 RECORD_CONTENT = "token-validation-value"
 RECORD_ID = 16420
+# A valid base32 secret (the canonical pyotp example key).
+TOTP_SECRET = "JBSWY3DPEHPK3PXP"
 
 
 class AuthenticatorTest(
@@ -113,6 +115,33 @@ class AuthenticatorTest(
         )
         self.config.nicmanager_credentials = good
         self.auth._setup_credentials()  # noqa: SLF001  (must not raise)
+
+    def test_setup_credentials_accepts_valid_totp_secret(self):
+        good = os.path.join(self.tempdir, "totp.ini")
+        dns_test_common.write(
+            {
+                "nicmanager_username": USERNAME,
+                "nicmanager_password": PASSWORD,
+                "nicmanager_totp_secret": TOTP_SECRET,
+            },
+            good,
+        )
+        self.config.nicmanager_credentials = good
+        self.auth._setup_credentials()  # noqa: SLF001  (must not raise)
+
+    def test_setup_credentials_rejects_invalid_totp_secret(self):
+        bad = os.path.join(self.tempdir, "badtotp.ini")
+        dns_test_common.write(
+            {
+                "nicmanager_username": USERNAME,
+                "nicmanager_password": PASSWORD,
+                "nicmanager_totp_secret": "not-base32-!!!",
+            },
+            bad,
+        )
+        self.config.nicmanager_credentials = bad
+        with pytest.raises(errors.PluginError):
+            self.auth._setup_credentials()  # noqa: SLF001
 
 
 class AuthenticatorLifecycleTest(
@@ -447,6 +476,89 @@ class NicmanagerClientTest(unittest.TestCase):
                 self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
         self.assertEqual(post.call_count, 1)  # no retry on auth failure
         slept.assert_not_called()
+
+    # -- 2FA / TOTP ---------------------------------------------------------
+
+    @requests_mock.Mocker()
+    def test_request_injects_totp_header_when_secret_set(self, m):
+        from certbot_dns_nicmanager._internal.dns_nicmanager import _NicmanagerClient
+
+        client = _NicmanagerClient(USERNAME, PASSWORD, ENDPOINT, totp_secret=TOTP_SECRET)
+        create = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        with mock.patch.object(client._totp, "now", return_value="654321"):
+            client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertTrue(create.called)
+        self.assertEqual(create.last_request.headers.get("X-Auth-Token"), "654321")
+
+    @requests_mock.Mocker()
+    def test_request_omits_totp_header_when_no_secret(self, m):
+        # The default client (no secret) must not send the 2FA header.
+        create = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertNotIn("X-Auth-Token", create.last_request.headers)
+
+    @requests_mock.Mocker()
+    def test_totp_header_present_on_every_attempt_including_retry(self, m):
+        # A retry that crosses a TOTP window must still carry a (fresh) code, so
+        # the header has to be minted per attempt, not once per client.
+        from certbot_dns_nicmanager._internal.dns_nicmanager import _NicmanagerClient
+
+        client = _NicmanagerClient(USERNAME, PASSWORD, ENDPOINT, totp_secret=TOTP_SECRET)
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [
+                {"status_code": 503, "json": {"message": "down"}},
+                {"status_code": 202, "json": {"id": RECORD_ID}},
+            ],
+        )
+        codes = iter(["111111", "222222"])
+        with mock.patch.object(client._totp, "now", side_effect=lambda: next(codes)):
+            with mock.patch(
+                "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+            ):
+                client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        sent = [r.headers.get("X-Auth-Token") for r in m.request_history]
+        self.assertEqual(sent, ["111111", "222222"])
+
+    def test_normalize_totp_secret_strips_spaces_and_uppercases(self):
+        from certbot_dns_nicmanager._internal.dns_nicmanager import (
+            _normalize_totp_secret,
+        )
+
+        self.assertEqual(
+            _normalize_totp_secret("jbsw y3dp ehpk 3pxp"), "JBSWY3DPEHPK3PXP"
+        )
+
+    @requests_mock.Mocker()
+    def test_spaced_totp_secret_decodes_and_produces_code(self, m):
+        # The portal shows the secret space-grouped; a spaced secret must decode
+        # (no binascii error) and yield a 6-digit code equal to the contiguous
+        # form's code for the same moment.
+        import pyotp
+
+        from certbot_dns_nicmanager._internal.dns_nicmanager import _NicmanagerClient
+
+        client = _NicmanagerClient(
+            USERNAME, PASSWORD, ENDPOINT, totp_secret="JBSW Y3DP EHPK 3PXP"
+        )
+        create = m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            status_code=202,
+            json={"id": RECORD_ID},
+        )
+        with mock.patch.object(
+            pyotp.TOTP, "now", autospec=True, return_value="424242"
+        ):
+            client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+        self.assertEqual(create.last_request.headers.get("X-Auth-Token"), "424242")
 
     # -- del_txt_record -----------------------------------------------------
 

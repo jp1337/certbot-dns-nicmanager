@@ -1,9 +1,11 @@
 """DNS Authenticator for nicmanager AnycastDNS."""
+import binascii
 import logging
 import time
 from collections.abc import Callable
 from typing import Any
 
+import pyotp
 import requests
 from certbot import errors
 from certbot.plugins import dns_common
@@ -31,6 +33,21 @@ MAX_REQUEST_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = 2.0
 RETRY_BACKOFF_CAP_SECONDS = 30.0
 RETRY_AFTER_CAP_SECONDS = 60.0
+
+# When the account has 2FA enabled, nicmanager requires a rotating TOTP code in
+# this header on every request; a request without it returns 401 "Missing 2FA
+# token header (X-Auth-Token)".
+TWO_FACTOR_HEADER = "X-Auth-Token"
+
+
+def _normalize_totp_secret(secret: str) -> str:
+    """Return the base32 TOTP secret without display whitespace, upper-cased.
+
+    Authenticator apps and the nicmanager portal present the shared secret in
+    space-separated, mixed-case groups (``abcd efgh …``); base32 decoding needs
+    it contiguous and upper-case.
+    """
+    return secret.replace(" ", "").upper()
 
 
 class Authenticator(dns_common.DNSAuthenticator):
@@ -87,6 +104,15 @@ class Authenticator(dns_common.DNSAuthenticator):
                 f"https:// URL (got {endpoint!r}). Credentials are sent as HTTP Basic "
                 f"auth and must never go over plaintext HTTP."
             )
+        totp_secret = credentials.conf("totp_secret")
+        if totp_secret:
+            try:
+                pyotp.TOTP(_normalize_totp_secret(totp_secret)).now()
+            except (binascii.Error, ValueError) as e:
+                raise errors.PluginError(
+                    f"{credentials.confobj.filename}: dns_nicmanager_totp_secret is "
+                    f"not a valid base32 TOTP secret: {e}"
+                ) from e
 
     def _setup_credentials(self) -> None:
         self.credentials = self._configure_credentials(
@@ -115,6 +141,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                 password,
                 self.credentials.conf("endpoint") or DEFAULT_ENDPOINT,
                 self.credentials.conf("zone"),
+                self.credentials.conf("totp_secret"),
             )
         return self._client
 
@@ -128,12 +155,18 @@ class _NicmanagerClient:
         password: str,
         endpoint: str = DEFAULT_ENDPOINT,
         zone: str | None = None,
+        totp_secret: str | None = None,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.configured_zone = zone.rstrip(".") if zone else None
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(username, password)
         self.session.headers.update({"Accept": "application/json"})
+        # When 2FA is enabled the API requires a fresh TOTP code per request
+        # (see _request). None means the account has no 2FA.
+        self._totp = (
+            pyotp.TOTP(_normalize_totp_secret(totp_secret)) if totp_secret else None
+        )
         # Maps a (record name, record value) pair to the (zone, record_id) tuple
         # that was created for it, so cleanup can delete it again by numeric id.
         # Keying on the value too is required for wildcard certs, where the base
@@ -275,12 +308,31 @@ class _NicmanagerClient:
             return int(record_id)
         return None
 
+    def _totp_kwargs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Merge a freshly generated TOTP header into the request kwargs.
+
+        A new code is minted for every attempt (not cached on the session), so a
+        retry that crosses a 30-second window still carries a valid code. Reuse
+        of the same code within a window is accepted by the API, so no
+        wait-for-next-window logic is needed. Returns kwargs unchanged when the
+        account has no 2FA.
+        """
+        if self._totp is None:
+            return kwargs
+        merged = dict(kwargs)
+        headers = dict(merged.get("headers") or {})
+        headers[TWO_FACTOR_HEADER] = self._totp.now()
+        merged["headers"] = headers
+        return merged
+
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         url = f"{self.endpoint}{path}"
         response = None
         for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
             try:
-                response = self.session.request(method, url, timeout=30, **kwargs)
+                response = self.session.request(
+                    method, url, timeout=30, **self._totp_kwargs(kwargs)
+                )
             except (
                 requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout,
@@ -342,8 +394,10 @@ class _NicmanagerClient:
         if status == 401:
             raise errors.PluginError(
                 f"nicmanager API authentication failed (HTTP 401). Check "
-                f"dns_nicmanager_username / dns_nicmanager_password, and make sure "
-                f"two-factor authentication is disabled on the account. {detail}"
+                f"dns_nicmanager_username / dns_nicmanager_password. If the account "
+                f"has 2FA enabled, set dns_nicmanager_totp_secret (base32) and keep "
+                f"the host clock in sync (NTP) — a skewed clock yields an invalid "
+                f"TOTP, and repeated invalid codes get the account throttled. {detail}"
             )
         if status == 403:
             # A 403 means either "this account does not own this zone" (a

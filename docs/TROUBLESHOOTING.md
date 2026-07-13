@@ -34,10 +34,12 @@ switched on. `401` means the credentials/username form are being rejected.
   - Using the *wrong* form returns `401 "Authentication error"` **even with the
     correct password**. This is the single most confusing failure mode — if
     `login.username` gives 401, try the email (or vice versa).
-- **Two-factor authentication (TOTP) must be disabled** on the account used for
-  automation. There is no way to supply a rotating code unattended. (lego can
-  send a TOTP via the `X-Auth-Token` header from a stored OTP secret, but
-  disabling 2FA on a dedicated automation account is simpler.)
+- **Two-factor authentication (TOTP) is supported** (since v1.1.0). If the account
+  has 2FA enabled, set `dns_nicmanager_totp_secret` to its base32 secret; the
+  plugin sends a fresh code in the `X-Auth-Token` header per request. Without it a
+  2FA account returns `401 "Missing 2FA token header (X-Auth-Token)"`. The host
+  clock must be accurate (NTP) — a skewed clock makes every generated code
+  invalid, and invalid codes count toward the throttle below.
 
 ## Do NOT brute-force credentials
 

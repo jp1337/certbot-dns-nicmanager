@@ -99,10 +99,11 @@ expectation.
 - Operators must supply the username in exactly the form their nicmanager
   account requires. The credentials INI comment and error messages call this
   out. The TROUBLESHOOTING document explains how to determine the correct form.
-- Two-factor authentication (TOTP) must be disabled on the account used for
-  automation. The API would require a rotating TOTP code via `X-Auth-Token`,
-  which cannot be provided unattended. There is no mechanism in this plugin to
-  supply a TOTP.
+- Two-factor authentication (TOTP) initially had to be disabled on the automation
+  account. **Superseded in v1.1.0:** the plugin now supplies the rotating code via
+  the `X-Auth-Token` header from an optional `dns_nicmanager_totp_secret`, so 2FA
+  can stay enabled. Reuse of a code within its 30-second window is accepted by the
+  API, so no wait-for-next-window handling is required.
 - Cleanup is strictly by id. A missed cleanup (no stored id) logs a warning but
   does not fail the issuance. The orphaned TXT record must be removed manually
   from the nicmanager UI if it matters.

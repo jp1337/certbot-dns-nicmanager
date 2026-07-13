@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "certbot-dns-nicmanager"
-version = "1.0.2"
+version = "1.1.0"
 description = "nicmanager AnycastDNS Authenticator plugin for Certbot"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,6 +34,7 @@ classifiers = [
 dependencies = [
     "certbot>=2.0.0",
     "requests>=2.32.0",
+    "pyotp>=2.9.0",
 ]
 
 [project.optional-dependencies]

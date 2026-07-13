@@ -61,9 +61,14 @@ nicmanager restricts to managing only the `_acme-challenge.<zone>` TXT record:
 
 Because such an account can touch nothing but the challenge record, a leaked
 credential cannot be used to hijack other records, transfer domains, or read
-account data. **Disable two-factor authentication** on the account used for
-automation — the API would otherwise require a rotating TOTP code that cannot be
-provided unattended.
+account data.
+
+**Two-factor authentication (TOTP) is supported.** If the account has 2FA
+enabled, the API requires a rotating code in the `X-Auth-Token` header on every
+request. Provide the account's base32 TOTP secret as `dns_nicmanager_totp_secret`
+and the plugin generates the code per request. Leave it unset for accounts
+without 2FA. The host clock must be accurate (NTP): a skewed clock yields an
+invalid code, and repeated invalid codes get the account throttled.
 
 Create an INI file, e.g. `~/.secrets/certbot/nicmanager.ini`:
 
@@ -72,6 +77,9 @@ Create an INI file, e.g. `~/.secrets/certbot/nicmanager.ini`:
 dns_nicmanager_username = mylogin.acmeuser
 # Quote the password if it contains '#' — an unquoted '#' starts an INI comment.
 dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
+
+# Optional. Base32 TOTP secret — required only if the account has 2FA enabled.
+# dns_nicmanager_totp_secret = JBSWY3DPEHPK3PXP
 
 # Optional. Defaults to https://api.nicmanager.com/v1
 # dns_nicmanager_endpoint = https://api.nicmanager.com/v1
@@ -144,12 +152,14 @@ Common failures, decoded (full details in
 
 | Response | Meaning | Fix |
 | --- | --- | --- |
-| `401 Authentication error` | Wrong username form or password | Match the username to the account's auth method: **email** for "E-Mail + Passwort" accounts, `login.username` otherwise. Disable 2FA. |
+| `401 Authentication error` | Wrong username form or password | Match the username to the account's auth method: **email** for "E-Mail + Passwort" accounts, `login.username` otherwise. |
+| `401 Missing 2FA token header (X-Auth-Token)` | Account has 2FA but no secret configured | Set `dns_nicmanager_totp_secret` to the account's base32 TOTP secret. |
 | `403 API usage not allowed` | Auth OK — API access not enabled | Ask nicmanager support to enable API access for the account. |
-| `401 Too many invalid attempts` / no response (`000`) | IP rate-limited / firewall-blocked after failed logins | Stop and wait. **Never** loop over credential variants — it locks the IP. |
+| `401 Too many invalid attempts` / no response (`000`) | IP rate-limited / firewall-blocked after failed logins | Stop and wait. **Never** loop over credential variants — it locks the IP. Check the host clock (NTP) if using 2FA — skew makes every code invalid. |
 
 Key gotchas: the username form depends on the account's **active authentication
-method** (email vs `login.username`); **2FA must be off**; a `#` in the password
+method** (email vs `login.username`); **2FA is supported** via
+`dns_nicmanager_totp_secret` (needs an accurate clock); a `#` in the password
 must be **quoted** in the INI; and the restricted API-ACME account **cannot read
 zones** (this plugin resolves the zone by create-attempt instead).
 

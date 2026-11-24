@@ -446,6 +446,36 @@ class NicmanagerClientTest(unittest.TestCase):
         slept.assert_called()  # a backoff happened
 
     @requests_mock.Mocker()
+    def test_post_retry_after_ambiguous_failure_warns_about_duplicate(self, m):
+        # A 504 or read timeout can arrive after the server stored the record; the
+        # retry then creates a second one and only its id is kept for cleanup.
+        for first in ({"status_code": 504}, {"exc": requests.exceptions.ReadTimeout}):
+            m.post(
+                f"{ENDPOINT}/anycast/{DOMAIN}/records",
+                [first, {"status_code": 202, "json": {"id": RECORD_ID}}],
+            )
+            with mock.patch(
+                "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+            ), self.assertLogs(
+                "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+            ) as logs:
+                self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+            self.assertIn(DOMAIN, "\n".join(logs.output))
+
+    @requests_mock.Mocker()
+    def test_post_retry_after_unprocessed_503_does_not_warn(self, m):
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [{"status_code": 503}, {"status_code": 202, "json": {"id": RECORD_ID}}],
+        )
+        with mock.patch(
+            "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+        ), self.assertNoLogs(
+            "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+        ):
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+
+    @requests_mock.Mocker()
     def test_request_gives_up_after_persistent_5xx(self, m):
         post = m.post(f"{ENDPOINT}/anycast/{DOMAIN}/records", status_code=503, json={})
         with mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"):

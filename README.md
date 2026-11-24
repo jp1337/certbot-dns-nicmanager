@@ -21,8 +21,8 @@ certbot certonly --authenticator dns-nicmanager \
   can touch nothing but the `_acme-challenge` record — it does not even need to
   read the zone.
 - **Two-factor authentication (TOTP)** supported.
-- **Safe cleanup:** the challenge record is deleted by its id; a transient API
-  error never leaves it behind unnoticed.
+- **Clean up by id:** the challenge record is deleted by the id the API returned;
+  if that fails, zone and id are logged for manual removal.
 - **Small and tested:** three runtime dependencies, typed, ~95 % test coverage,
   running in production since June 2026.
 

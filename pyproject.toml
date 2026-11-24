@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "certbot-dns-nicmanager"
-version = "1.1.0"
+version = "1.1.1"
 description = "Certbot DNS-01 plugin for nicmanager AnycastDNS: wildcard Let's Encrypt certificates, 2FA (TOTP) support"
 readme = "README.md"
 requires-python = ">=3.10"

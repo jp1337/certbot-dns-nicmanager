@@ -18,6 +18,10 @@
      --notes "$(awk '/^## \[X.Y.Z\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md)"
    ```
 
+6. AUR: in [`packaging/aur/`](../packaging/aur/PKGBUILD) set `pkgver`, reset
+   `pkgrel=1`, put the new sdist's sha256 (PyPI shows it) into `PKGBUILD` and
+   `.SRCINFO`, then push both to `ssh://aur@aur.archlinux.org/certbot-dns-nicmanager.git`.
+
 Versioning: SemVer. A dependency floor raised to fix a bug is a patch release.
 
 ## CI (`.github/workflows/ci.yml`)

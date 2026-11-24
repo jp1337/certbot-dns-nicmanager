@@ -32,6 +32,7 @@ per IP and clears with time; the portal cannot lift it.
 | --- | --- | --- |
 | `Could not create the ACME challenge record for … in any candidate zone` | Every candidate zone answered 403/404 | The account may not manage this domain, or set [`dns_nicmanager_zone`](CONFIGURATION.md#when-to-set-dns_nicmanager_zone) |
 | `nicmanager API access is not enabled for this account` | 403 "API usage not allowed" | Ask support to enable API access |
+| `the password contains '#' … Quote it` | Unquoted `#` in the password | [Quote the password](CONFIGURATION.md#the--in-passwords) |
 | `dns_nicmanager_totp_secret is not a valid base32 TOTP secret` | Typo, or the secret is shorter than 16 characters | Copy the secret again from the portal |
 | `dns_nicmanager_endpoint must be an https:// URL` | Plain-HTTP endpoint configured | Use `https://` or remove the line |
 | `Error communicating with the nicmanager API` | Network error after three attempts | Check connectivity to `api.nicmanager.com` |

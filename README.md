@@ -82,7 +82,7 @@ Certbot came from `snap`, run Certbot from a `pip` environment with both package
 ```ini
 # login.username — or the email, if the account logs in with "E-Mail + Passwort"
 dns_nicmanager_username = mylogin.acmeuser
-# Quote the password if it contains '#': unquoted, '#' cuts it off.
+# Quote the password if it contains '#' (the plugin stops otherwise).
 dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
 # Only if the account has 2FA:
 # dns_nicmanager_totp_secret = JBSWY3DPEHPK3PXP

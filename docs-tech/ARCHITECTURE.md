@@ -72,10 +72,17 @@ intentional and should be preserved.
 Responsibilities:
 
 - Maintains a `requests.Session` with HTTP Basic auth configured from username
-  and password, and `Accept: application/json`.
+  and password, and `Accept: application/json`. With 2FA configured, every
+  request attempt carries a freshly generated TOTP code in `X-Auth-Token`.
+- Retries `429`/`502`/`503`/`504`, timeouts and connection errors up to three
+  attempts (exponential backoff, `Retry-After` honoured). A retried `POST` after
+  an ambiguous failure (anything but `429`/`503`/connect timeout) logs a warning:
+  the first attempt may have created a record that cleanup never sees.
 - Implements zone-walk zone resolution (see below).
-- Stores `(zone, record_id)` tuples in `self._created` keyed by record name, so
-  cleanup can delete by numeric id without any GET request.
+- Stores `(zone, record_id)` tuples in `self._created` keyed by
+  `(record name, record value)`, so cleanup can delete by numeric id without any
+  GET request. The value is part of the key because a wildcard certificate
+  (`-d example.com -d '*.example.com'`) creates two records with the same name.
 - Classifies API error responses into `_ForbiddenError` (403),
   `_NotFoundError` (404), and `errors.PluginError` (all others), enabling the
   zone walk to distinguish "wrong zone" from "auth failure".
@@ -105,10 +112,13 @@ certbot calls _perform(domain, validation_name, validation)
                       body: {name, type:"TXT", value, ttl}
                     |
                     +-- 2xx  -> extract id from response body
-                    |           store (zone, id) in self._created[record_name]
+                    |           store (zone, id) in self._created[(name, value)]
                     |           return (done)
                     |
-                    +-- 403/404 -> store as last_error, continue to next candidate
+                    +-- 403 "API usage not allowed" -> raise PluginError
+                    |           immediately (account-wide, not zone-specific)
+                    |
+                    +-- other 403, 404 -> store as last_error, next candidate
                     |
                     +-- 401  -> raise PluginError immediately (do not swallow)
                     |
@@ -120,11 +130,13 @@ certbot calls _cleanup(domain, validation_name, validation)
     |
     +-- _NicmanagerClient.del_txt_record(validation_name, validation)
             |
-            +-- pop (zone, id) from self._created
+            +-- look up (zone, id) in self._created[(name, value)]
             |
             +-- DELETE /anycast/{zone}/records/{id}
-            |       202 -> log success
-            |       error -> log warning (never raise; cleanup must not mask issuance)
+            |       2xx -> log success, drop the entry
+            |       404 -> already gone: log, drop the entry
+            |       error -> log warning with zone + id for manual removal
+            |                (never raise; cleanup must not mask issuance)
             |
             +-- if no stored id: log warning, return (cannot list records)
 ```

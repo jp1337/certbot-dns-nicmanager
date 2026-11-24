@@ -47,5 +47,7 @@ jobs:
           pip install -e '.[dev]'
       - name: Ruff
         run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
       - name: Mypy
         run: mypy certbot_dns_nicmanager

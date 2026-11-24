@@ -15,6 +15,7 @@ repos:
     hooks:
       - id: ruff-check  # "ruff" is a legacy alias since ruff-pre-commit 0.x
         args: [--fix]
+      - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.1

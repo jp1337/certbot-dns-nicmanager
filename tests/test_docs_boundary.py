@@ -5,6 +5,7 @@ real sdist and reads its file list, so a `graft .`, an `include docs-tech/...`
 or a setuptools default that starts picking up Markdown fails here whatever the
 manifest seems to say.
 """
+
 import re
 import shutil
 import subprocess
@@ -15,6 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+_BUILD_SDIST = "import sys, setuptools.build_meta as b; print(b.build_sdist(sys.argv[1]))"
 
 # The sdist ships tests/ but not docs-tech/, so these checks only mean something
 # in a git checkout; a packager running the suite from the sdist skips them.
@@ -35,18 +37,22 @@ def _sdist_names(tmp_path: Path) -> list[str]:
         (src / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / rel, src / rel)
     out = tmp_path / "dist"
-    name = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys, setuptools.build_meta as b; print(b.build_sdist(sys.argv[1]))",
-            str(out),
-        ],
-        cwd=src,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip().splitlines()[-1]
+    name = (
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _BUILD_SDIST,
+                str(out),
+            ],
+            cwd=src,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        .stdout.strip()
+        .splitlines()[-1]
+    )
     with tarfile.open(out / name) as sdist:
         # Drop the "certbot_dns_nicmanager-X.Y.Z/" prefix.
         return [m.split("/", 1)[1] for m in sdist.getnames() if "/" in m]

@@ -14,11 +14,12 @@ pip install -e '.[test,dev]'
 
 ## Before opening a pull request
 
-Run the same checks CI runs — all three must pass:
+Run the same checks CI runs — all four must pass:
 
 ```bash
 pytest                          # tests + coverage
 ruff check .                    # lint + import order
+ruff format --check .           # formatting (`ruff format .` fixes it)
 mypy certbot_dns_nicmanager     # type check
 ```
 

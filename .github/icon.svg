@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="certbot-dns-nicmanager">
+  <rect width="96" height="96" rx="22" fill="#1f4e8c"/>
+  <path d="M33 44v-8a15 15 0 0 1 30 0v8" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+  <rect x="24" y="42" width="48" height="36" rx="7" fill="#ffffff"/>
+  <path d="M48 50v20M39.3 55l17.4 10M56.7 55l-17.4 10" stroke="#1f4e8c" stroke-width="5" stroke-linecap="round"/>
+</svg>

@@ -1,204 +1,143 @@
-# certbot-dns-nicmanager
+<!-- markdownlint-disable MD033 MD041 -->
+<!-- Every link and image is absolute: PyPI renders this file too, and it cannot
+     resolve a path relative to the repository. -->
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jp1337/certbot-dns-nicmanager/main/.github/icon.svg" alt="" width="88" height="88">
+</p>
 
-[![CI](https://github.com/jp1337/certbot-dns-nicmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jp1337/certbot-dns-nicmanager/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/certbot-dns-nicmanager.svg)](https://pypi.org/project/certbot-dns-nicmanager/)
-[![Python](https://img.shields.io/pypi/pyversions/certbot-dns-nicmanager.svg)](https://pypi.org/project/certbot-dns-nicmanager/)
-[![Downloads](https://img.shields.io/pypi/dm/certbot-dns-nicmanager.svg)](https://pypistats.org/packages/certbot-dns-nicmanager)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.txt)
+<h1 align="center">certbot-dns-nicmanager</h1>
 
-**Wildcard Let's Encrypt certificates for domains on nicmanager AnycastDNS — fully
-automatic, renewal included.**
+<p align="center"><em>Wildcard certificates for nicmanager domains. Issued and renewed without you.</em></p>
+
+<!-- One badge service, so the set shares a shape, a typeface and a logo
+     treatment. Every badge reads from the workflows, PyPI or the repository,
+     so none of them can drift the way a hand-written version number could. -->
+<!-- markdownlint-disable MD013 -->
+<p align="center">
+  <a href="https://github.com/jp1337/certbot-dns-nicmanager/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jp1337/certbot-dns-nicmanager/ci.yml?branch=main&label=tests&logo=github&logoColor=white" alt="Tests"></a>
+  <a href="https://github.com/jp1337/certbot-dns-nicmanager/actions/workflows/publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/jp1337/certbot-dns-nicmanager/publish.yml?label=publish&logo=pypi&logoColor=white" alt="Publish"></a>
+  <a href="https://pypi.org/project/certbot-dns-nicmanager/"><img src="https://img.shields.io/pypi/v/certbot-dns-nicmanager?logo=pypi&logoColor=white&label=pypi" alt="PyPI version"></a>
+  <a href="https://pypistats.org/packages/certbot-dns-nicmanager"><img src="https://img.shields.io/pypi/dm/certbot-dns-nicmanager?logo=pypi&logoColor=white&label=downloads" alt="Downloads per month"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jp1337/certbot-dns-nicmanager/releases/latest"><img src="https://img.shields.io/github/v/release/jp1337/certbot-dns-nicmanager?logo=github&logoColor=white&label=release" alt="Latest release"></a>
+  <a href="https://pypi.org/project/certbot-dns-nicmanager/"><img src="https://img.shields.io/pypi/pyversions/certbot-dns-nicmanager?logo=python&logoColor=white&label=python" alt="Python versions"></a>
+  <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/github/license/jp1337/certbot-dns-nicmanager?logo=opensourceinitiative&logoColor=white&label=license&color=blue" alt="Apache-2.0"></a>
+  <a href="https://ko-fi.com/jp1337"><img src="https://img.shields.io/badge/ko--fi-support-13C3FF?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/certbot-dns-nicmanager/"><strong>PyPI</strong></a> ·
+  <a href="https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/TROUBLESHOOTING.md"><strong>Troubleshooting</strong></a> ·
+  <a href="https://github.com/jp1337/certbot-dns-nicmanager/blob/main/CHANGELOG.md">Changelog</a>
+</p>
+<!-- markdownlint-enable MD013 -->
+
+A [Certbot](https://certbot.eff.org/) plugin for
+[nicmanager](https://www.nicmanager.com/) **AnycastDNS**. It answers the `dns-01`
+challenge through the [nicmanager API](https://api.nicmanager.com/docs/v1/):
+**`*.example.com` certificates, with an account that can touch nothing but the
+challenge record.**
+
+## Quick start
 
 ```bash
-pip install certbot-dns-nicmanager
+pip install certbot-dns-nicmanager      # into the same environment as Certbot
 certbot certonly --authenticator dns-nicmanager \
   --dns-nicmanager-credentials ~/.secrets/certbot/nicmanager.ini \
   -d 'example.com' -d '*.example.com'
 ```
 
-- **Wildcard certificates** via the `dns-01` challenge, no inbound port needed.
-- **Least privilege:** works with nicmanager's restricted API-ACME account, which
-  can touch nothing but the `_acme-challenge` record — it does not even need to
-  read the zone.
-- **Two-factor authentication (TOTP)** supported.
-- **Clean up by id:** the challenge record is deleted by the id the API returned;
-  if that fails, zone and id are logged for manual removal.
-- **Small and tested:** three runtime dependencies, typed, ~95 % test coverage,
-  running in production since June 2026.
+`certbot plugins` should list `dns-nicmanager`. There is no `snap` package: if your
+Certbot came from `snap`, run Certbot from a `pip` environment with both packages.
 
-A [Certbot](https://certbot.eff.org/) DNS authenticator plugin for
-[nicmanager](https://www.nicmanager.com/) **AnycastDNS**. It automates the
-`dns-01` ACME challenge by creating, and then removing, the
-`_acme-challenge` TXT record through the
-[nicmanager API](https://api.nicmanager.com/docs/v1/) — which makes it possible
-to issue **wildcard certificates** for domains hosted on nicmanager.
+## ✨ Features
 
-There was no Certbot plugin for the nicmanager API, and the `lego`-based
-multi-provider plugins do not yet support nicmanager's current API. This plugin
-fills that gap with a small, dependency-light, well-tested implementation.
-
-## Why DNS-01 (and not HTTP-01)?
-
-`dns-01` is the only ACME challenge type that can issue **wildcard**
-certificates, and it does not require any inbound HTTP reachability. It also
-keeps your individual service hostnames out of the public
-[Certificate Transparency](https://certificate.transparency.dev/) logs that a
-per-host `http-01` certificate would expose.
-
-## Installation
-
-```bash
-pip install certbot-dns-nicmanager
-```
-
-> Install the plugin into the **same** Python environment as Certbot. There is no
-> `snap` package; if your Certbot came from `snap`, run Certbot from a `pip`
-> environment that contains both packages instead.
-
-Verify it is registered:
-
-```bash
-certbot plugins
-# ... should list:  * dns-nicmanager
-```
+- **Wildcard certificates** — `dns-01` is the only ACME challenge that issues them,
+  and it needs no inbound port
+- **Least privilege** — works with nicmanager's restricted API-ACME account; it does
+  not even need to read the zone
+- **Two-factor authentication** — a fresh TOTP code with every request
+- **Cleanup by id** — the challenge record is deleted by the id the API returned; if
+  that fails, zone and id are logged for manual removal
+- **Fewer hostnames in public logs** — one wildcard instead of a certificate per
+  host keeps service names out of
+  [Certificate Transparency](https://certificate.transparency.dev/)
+- **Small and tested** — three runtime dependencies, typed, ~95 % test coverage,
+  Python 3.10 to 3.15, in production since June 2026
 
 ## Credentials
 
-This plugin authenticates against the nicmanager API with HTTP Basic auth.
-The strongly recommended setup is a dedicated **API-ACME account**, which
-nicmanager restricts to managing only the `_acme-challenge.<zone>` TXT record:
+Create a dedicated **API-ACME account** in nicmanager with only these rights:
 
-| Module           | Rights                                  |
-| ---------------- | --------------------------------------- |
-| Webfrontend      | –                                       |
-| Account settings | –                                       |
-| Domains          | –                                       |
-| Nameserver       | View, Manage (create, edit, delete)     |
-| Domainsecurity   | –                                       |
-| Other modules    | –                                       |
+| Module | Rights |
+| --- | --- |
+| Nameserver | View, Manage (create, edit, delete) |
+| everything else | – |
 
-Because such an account can touch nothing but the challenge record, a leaked
-credential cannot be used to hijack other records, transfer domains, or read
+A leaked credential then cannot touch other records, transfer domains or read
 account data.
 
-**Two-factor authentication (TOTP) is supported.** If the account has 2FA
-enabled, the API requires a rotating code in the `X-Auth-Token` header on every
-request. Provide the account's base32 TOTP secret as `dns_nicmanager_totp_secret`
-and the plugin generates the code per request. Leave it unset for accounts
-without 2FA. The host clock must be accurate (NTP): a skewed clock yields an
-invalid code, and repeated invalid codes get the account throttled.
-
-Create an INI file, e.g. `~/.secrets/certbot/nicmanager.ini`:
+`~/.secrets/certbot/nicmanager.ini`, then `chmod 600` it:
 
 ```ini
-# nicmanager API credentials used by Certbot
+# login.username — or the email, if the account logs in with "E-Mail + Passwort"
 dns_nicmanager_username = mylogin.acmeuser
-# Quote the password if it contains '#' — an unquoted '#' starts an INI comment.
+# Quote the password if it contains '#': unquoted, '#' starts a comment.
 dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
 
-# Optional. Base32 TOTP secret — required only if the account has 2FA enabled.
+# Optional: only if the account has 2FA. Needs an accurate clock (NTP).
 # dns_nicmanager_totp_secret = JBSWY3DPEHPK3PXP
 
-# Optional. Defaults to https://api.nicmanager.com/v1
+# Optional: defaults to https://api.nicmanager.com/v1
 # dns_nicmanager_endpoint = https://api.nicmanager.com/v1
 
-# Optional. Skip zone detection and always use this zone.
+# Optional: skip zone detection. Applies to every domain of the certificate.
 # dns_nicmanager_zone = example.com
 ```
 
-The `username` is `login.username` (or the account email). Zone detection works
-without any read access, so `dns_nicmanager_zone` is only needed in unusual
-multi-zone-suffix setups.
-
-Protect this file:
-
-```bash
-chmod 600 ~/.secrets/certbot/nicmanager.ini
-```
-
-## Usage
-
-```bash
-# A single hostname
-certbot certonly \
-  --authenticator dns-nicmanager \
-  --dns-nicmanager-credentials ~/.secrets/certbot/nicmanager.ini \
-  -d example.com
-
-# A wildcard (and the apex)
-certbot certonly \
-  --authenticator dns-nicmanager \
-  --dns-nicmanager-credentials ~/.secrets/certbot/nicmanager.ini \
-  -d 'example.com' -d '*.example.com'
-```
-
-### Command-line arguments
-
-| Argument                                | Description                                                                 | Default |
-| --------------------------------------- | --------------------------------------------------------------------------- | ------- |
-| `--dns-nicmanager-credentials`          | Path to the nicmanager credentials INI file. **(required)**                 | –       |
-| `--dns-nicmanager-propagation-seconds`  | Seconds to wait for DNS propagation before the ACME server checks the record. | `60`    |
+| Argument | Default |
+| --- | --- |
+| `--dns-nicmanager-credentials` — path to the INI file | required |
+| `--dns-nicmanager-propagation-seconds` — wait before the ACME server checks | `60` |
 
 ## How it works
 
-1. Certbot asks the plugin to create `_acme-challenge.<domain>` with the
-   validation token.
-2. The plugin determines the owning AnycastDNS zone **without reading it** — a
-   restricted API-ACME account cannot read zones. It tries
-   `POST /v1/anycast/<candidate>/records` against each candidate zone
-   (most-specific first); a `403`/`404` skips to the next candidate, the first
-   `2xx` wins. An explicit `dns_nicmanager_zone` short-circuits this. A `401`
-   (genuine auth failure) is surfaced immediately.
-3. nicmanager returns the new record's numeric `id`, which the plugin
-   remembers.
-4. After validation, the plugin removes the record via
-   `DELETE /v1/anycast/<zone>/records/<id>`.
-
-TTL is fixed at the API minimum of **900 seconds**.
-
-> **Heads-up:** the API blocks the IP after too many failed logins. Make sure
-> the password is correct (and any `#` in it is quoted in the INI, see below)
-> before running at scale.
+1. Certbot hands over `_acme-challenge.<domain>` and the token.
+2. The plugin finds the zone **without reading it**: it tries
+   `POST /anycast/<zone>/records` from the most specific candidate up. `403`/`404`
+   moves on, the first success wins, a `401` stops at once.
+3. nicmanager returns the record id; TTL is the API minimum of 900 seconds.
+4. After validation: `DELETE /anycast/<zone>/records/<id>`.
 
 ## Troubleshooting
 
-Common failures, decoded (full details in
-[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)):
+| Response | Fix |
+| --- | --- |
+| `401 Authentication error` | Wrong username form: **email** for "E-Mail + Passwort" accounts, `login.username` otherwise |
+| `401 Missing 2FA token header` | Set `dns_nicmanager_totp_secret` |
+| `403 API usage not allowed` | Ask nicmanager support to enable API access |
+| `401 Too many invalid attempts`, or no response | IP blocked after failed logins: **stop and wait**, never loop over credential variants; with 2FA check the clock |
 
-| Response | Meaning | Fix |
-| --- | --- | --- |
-| `401 Authentication error` | Wrong username form or password | Match the username to the account's auth method: **email** for "E-Mail + Passwort" accounts, `login.username` otherwise. |
-| `401 Missing 2FA token header (X-Auth-Token)` | Account has 2FA but no secret configured | Set `dns_nicmanager_totp_secret` to the account's base32 TOTP secret. |
-| `403 API usage not allowed` | Auth OK — API access not enabled | Ask nicmanager support to enable API access for the account. |
-| `401 Too many invalid attempts` / no response (`000`) | IP rate-limited / firewall-blocked after failed logins | Stop and wait. **Never** loop over credential variants — it locks the IP. Check the host clock (NTP) if using 2FA — skew makes every code invalid. |
+Everything else:
+[docs/TROUBLESHOOTING.md](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/TROUBLESHOOTING.md).
 
-Key gotchas: the username form depends on the account's **active authentication
-method** (email vs `login.username`); **2FA is supported** via
-`dns_nicmanager_totp_secret` (needs an accurate clock); a `#` in the password
-must be **quoted** in the INI; and the restricted API-ACME account **cannot read
-zones** (this plugin resolves the zone by create-attempt instead).
+## Contributing
 
-## Development
+Issues and pull requests are welcome; see
+[CONTRIBUTING.md](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/CONTRIBUTING.md).
+Security issues go through
+[private vulnerability reporting](https://github.com/jp1337/certbot-dns-nicmanager/security/advisories/new).
+The design and its decisions are in
+[docs-tech/](https://github.com/jp1337/certbot-dns-nicmanager/tree/main/docs-tech).
 
 ```bash
-git clone https://github.com/jp1337/certbot-dns-nicmanager
-cd certbot-dns-nicmanager
-python -m venv .venv && . .venv/bin/activate
-pip install -e '.[test,dev]'
-
-pytest          # run the test suite
-ruff check .    # lint
-mypy certbot_dns_nicmanager
+pip install -e '.[test,dev]' && pytest && ruff check . && mypy certbot_dns_nicmanager
 ```
-
-For the design and the reasoning behind it, see
-[`docs-tech/ARCHITECTURE.md`](docs-tech/ARCHITECTURE.md) and the Architecture Decision
-Records in [`docs-tech/decisions/`](docs-tech/decisions/) (DNS-01-only, zone resolution
-without zone reads, and the basic-auth username / cleanup-by-id decisions).
 
 ## License
 
-[Apache License 2.0](LICENSE.txt)
-
-This is an independent, community-maintained plugin and is not affiliated with
-or endorsed by InterNexum GmbH / nicmanager or the EFF / Certbot project.
+[Apache License 2.0](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/LICENSE.txt).
+An independent plugin, not affiliated with or endorsed by InterNexum GmbH /
+nicmanager or the EFF / Certbot project.

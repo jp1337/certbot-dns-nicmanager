@@ -40,6 +40,10 @@ challenge through the [nicmanager API](https://api.nicmanager.com/docs/v1/):
 **`*.example.com` certificates, with an account that can touch nothing but the
 challenge record.**
 
+> 🇩🇪 Let's-Encrypt-Wildcard-Zertifikate für Domains bei nicmanager (InterNexum):
+> Certbot-Plugin für die AnycastDNS-API, mit eingeschränktem API-ACME-Account und
+> Zwei-Faktor-Authentifizierung.
+
 ## Quick start
 
 ```bash
@@ -61,6 +65,8 @@ Certbot came from `snap`, run Certbot from a `pip` environment with both package
 - **Two-factor authentication** — a fresh TOTP code with every request
 - **Cleanup by id** — the challenge record is deleted by the id the API returned; if
   that fails, zone and id are logged for manual removal
+- **The only nicmanager plugin that needs no zone read access** — see
+  [compared to lego](https://github.com/jp1337/certbot-dns-nicmanager#compared-to-lego)
 - **Fewer hostnames in public logs** — one wildcard instead of a certificate per
   host keeps service names out of
   [Certificate Transparency](https://certificate.transparency.dev/)
@@ -69,47 +75,45 @@ Certbot came from `snap`, run Certbot from a `pip` environment with both package
 
 ## Credentials
 
-Create a dedicated **API-ACME account** in nicmanager with only these rights:
-
-| Module | Rights |
-| --- | --- |
-| Nameserver | View, Manage (create, edit, delete) |
-| everything else | – |
-
-A leaked credential then cannot touch other records, transfer domains or read
-account data.
-
-`~/.secrets/certbot/nicmanager.ini`, then `chmod 600` it:
+1. In nicmanager, create an **API-ACME account** (rights: Nameserver view + manage,
+   nothing else) and make sure API access is enabled for it.
+2. Write `/etc/letsencrypt/nicmanager.ini` and `chmod 600` it:
 
 ```ini
 # login.username — or the email, if the account logs in with "E-Mail + Passwort"
 dns_nicmanager_username = mylogin.acmeuser
-# Quote the password if it contains '#': unquoted, '#' starts a comment.
+# Quote the password if it contains '#': unquoted, '#' cuts it off.
 dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
-
-# Optional: only if the account has 2FA. Needs an accurate clock (NTP).
+# Only if the account has 2FA:
 # dns_nicmanager_totp_secret = JBSWY3DPEHPK3PXP
-
-# Optional: defaults to https://api.nicmanager.com/v1
-# dns_nicmanager_endpoint = https://api.nicmanager.com/v1
-
-# Optional: skip zone detection. Applies to every domain of the certificate.
-# dns_nicmanager_zone = example.com
 ```
 
-| Argument | Default |
-| --- | --- |
-| `--dns-nicmanager-credentials` — path to the INI file | required |
-| `--dns-nicmanager-propagation-seconds` — wait before the ACME server checks | `60` |
+Details: [account setup](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/ACCOUNT.md) ·
+[all options, renewal](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/CONFIGURATION.md) ·
+[troubleshooting](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/TROUBLESHOOTING.md)
 
 ## How it works
 
-1. Certbot hands over `_acme-challenge.<domain>` and the token.
-2. The plugin finds the zone **without reading it**: it tries
-   `POST /anycast/<zone>/records` from the most specific candidate up. `403`/`404`
-   moves on, the first success wins, a `401` stops at once.
-3. nicmanager returns the record id; TTL is the API minimum of 900 seconds.
-4. After validation: `DELETE /anycast/<zone>/records/<id>`.
+<img src="https://raw.githubusercontent.com/jp1337/certbot-dns-nicmanager/main/docs/assets/challenge-flow.drawio.svg" alt="Sequence: Certbot asks the plugin to create _acme-challenge.www.example.com. The plugin posts the record to the candidate zone www.example.com (404), then to example.com (202 with the record id). After the propagation wait Let's Encrypt queries the TXT record. On cleanup the plugin deletes the record by its id." width="100%">
+
+The zone is found by **trying the create**, most specific candidate first — the
+API-ACME account cannot read zones. Cleanup deletes by the id the API returned.
+
+## Compared to lego
+
+[lego](https://go-acme.github.io/lego/dns/nicmanager/) (also inside
+[certbot-dns-multi](https://github.com/alexzorin/certbot-dns-multi) and Traefik)
+supports the same API and 2FA. The difference is the account it needs:
+
+| | certbot-dns-nicmanager | lego `nicmanager` |
+| --- | --- | --- |
+| Reads the zone before writing | no | yes (`GET /anycast/{zone}`) |
+| Works with the restricted API-ACME account | yes | no: that account cannot read zones |
+| Cleanup | by the id the API returned | looks the record up by name and value |
+
+The lego column is read from its
+[source](https://github.com/go-acme/lego/blob/master/providers/dns/nicmanager/nicmanager.go),
+not tested against a live API-ACME account.
 
 ## Troubleshooting
 
@@ -118,10 +122,9 @@ dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
 | `401 Authentication error` | Wrong username form: **email** for "E-Mail + Passwort" accounts, `login.username` otherwise |
 | `401 Missing 2FA token header` | Set `dns_nicmanager_totp_secret` |
 | `403 API usage not allowed` | Ask nicmanager support to enable API access |
-| `401 Too many invalid attempts`, or no response | IP blocked after failed logins: **stop and wait**, never loop over credential variants; with 2FA check the clock |
+| `401 Too many invalid attempts`, or no response | IP blocked after failed logins: **stop and wait**, never loop over credential variants |
 
-Everything else:
-[docs/TROUBLESHOOTING.md](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/TROUBLESHOOTING.md).
+Everything else: [docs/TROUBLESHOOTING.md](https://github.com/jp1337/certbot-dns-nicmanager/blob/main/docs/TROUBLESHOOTING.md).
 
 ## Contributing
 

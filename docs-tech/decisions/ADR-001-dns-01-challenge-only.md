@@ -54,6 +54,6 @@ types.
 - The account used for automation requires DNS API access, not HTTP access.
   Operators who have not yet obtained API access from nicmanager must fall back
   to manual `--manual --preferred-challenges dns` issuance in the interim (see
-  [`docs/TROUBLESHOOTING.md`](../../docs/TROUBLESHOOTING.md#manual-fallback-while-the-api-is-unavailable)).
+  [`docs/TROUBLESHOOTING.md`](../../docs/TROUBLESHOOTING.md#certificates-now-api-access-later)).
 - Hosts where DNS is not managed through nicmanager cannot use this plugin, even
   if they could serve HTTP-01 challenges.

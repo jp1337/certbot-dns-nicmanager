@@ -2,7 +2,7 @@
 
 This document describes the design of `certbot-dns-nicmanager` for maintainers
 and contributors. For operational troubleshooting, see
-[`docs/TROUBLESHOOTING.md`](../docs/TROUBLESHOOTING.md).
+the [operator documentation](../docs/README.md).
 
 ---
 
@@ -159,55 +159,16 @@ The algorithm is described in full in
 
 ---
 
-## API Endpoints Used
+## API, credentials, packaging
 
-Base URL: `https://api.nicmanager.com/v1` (overridable via `dns_nicmanager_endpoint`).
+Not repeated here, so they cannot drift:
 
-| Operation | Method + Path | Request body | Success response |
-|-----------|--------------|--------------|-----------------|
-| Create TXT record | `POST /anycast/{zone}/records` | `{"name": str, "type": "TXT", "value": str, "ttl": int}` | `202` with `{"id": int, ...}` |
-| Delete TXT record | `DELETE /anycast/{zone}/records/{id}` | — | `202` |
-
-`{zone}` is the zone name (e.g. `example.com`). The `name` field is the full
-record node (e.g. `_acme-challenge.example.com`). The numeric `id` from the
-create response is the only safe way to delete the record; the restricted
-account cannot list records to find it after the fact.
-
-Authentication is HTTP Basic. The username form must match the nicmanager
-account's active authentication method: the account email for "E-Mail + Passwort"
-accounts, or `login.username` otherwise. See
-[ADR-003](decisions/ADR-003-basic-auth-username-and-cleanup-by-id.md) and
-[`docs/TROUBLESHOOTING.md`](../docs/TROUBLESHOOTING.md#authentication) for the exact
-rules.
-
----
-
-## Credentials INI
-
-The INI file is read by Certbot's `_configure_credentials` /
-`CredentialsConfiguration` machinery (using `configobj` under the hood).
-
-| Key | Required | Default | Notes |
-|-----|----------|---------|-------|
-| `dns_nicmanager_username` | Yes | — | Must match the account's active auth method. |
-| `dns_nicmanager_password` | Yes | — | Quote with `"..."` if it contains `#`. |
-| `dns_nicmanager_endpoint` | No | `https://api.nicmanager.com/v1` | Override for testing or staging. |
-| `dns_nicmanager_zone` | No | — | Short-circuits zone-walk; use for unusual multi-suffix setups. |
-
----
-
-## Packaging
-
-| Aspect | Detail |
-|--------|--------|
-| Build backend | `setuptools>=64`, PEP 517 |
-| Entry point group | `certbot.plugins` → `dns-nicmanager` |
-| Entry point target | `certbot_dns_nicmanager._internal.dns_nicmanager:Authenticator` |
-| Python requirement | `>=3.10` |
-| Runtime dependencies | `certbot>=2.0.0`, `requests>=2.20.0` |
-| Packages | `certbot_dns_nicmanager`, `certbot_dns_nicmanager._internal` |
-| Type stubs | `py.typed` marker present; `types-requests` used for mypy |
-| Distribution | Release tarball; not yet on PyPI |
+| Topic | Source of truth |
+| --- | --- |
+| Endpoints, error answers, account limits | [NICMANAGER-API.md](NICMANAGER-API.md) |
+| Credentials keys and CLI arguments | [docs/CONFIGURATION.md](../docs/CONFIGURATION.md) |
+| Dependencies, Python range, entry point | [`pyproject.toml`](../pyproject.toml) |
+| CI matrix, release, dependency updates | [RELEASING.md](RELEASING.md) |
 
 ---
 
@@ -216,27 +177,20 @@ The INI file is read by Certbot's `_configure_credentials` /
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
 | Plugin base class | `certbot.plugins.dns_common.DNSAuthenticator` | Provides credential loading, propagation wait, and the `_perform`/`_cleanup` lifecycle; avoids reimplementing certbot's plugin protocol. |
-| HTTP client | `requests` + `requests.Session` | Standard, well-tested; session reuse keeps the Basic-auth header and connection pool across multiple calls in the same run. |
-| Zone candidate generation | `certbot.plugins.dns_common.base_domain_name_guesses` | Reuses certbot's public-suffix-aware registrable-domain logic; avoids bundling a PSL or rolling a custom suffix splitter. |
-| Linting | `ruff` (rules E, F, W, I, UP, B) | Fast; enforces import ordering and modern-Python upgrades in one pass. |
-| Type checking | `mypy` (strict equality, no redundant casts) | Catches wrong-type bugs at CI time; `py.typed` lets downstream type-checkers see the stubs. |
-| Test framework | `pytest` + `requests-mock` | `requests-mock` intercepts `requests.Session` calls without patching at the socket level, keeping tests fast and deterministic. |
-| CI matrix | Python 3.10–3.13 | Covers the full declared support range. |
+| HTTP client | `requests` + `requests.Session` | Session reuse keeps the Basic-auth header and connection pool across the calls of one run. |
+| 2FA | `pyotp` (`_ProviderTOTP`, floor lowered to 80 bits) | The provider issues the secret; pyotp's own 112-bit floor would reject common secrets. |
+| Zone candidate generation | `certbot.plugins.dns_common.base_domain_name_guesses` | Reuses certbot's registrable-domain logic; no bundled public-suffix list. |
+| Lint, format, types | `ruff check`, `ruff format`, `mypy` | Run in CI and as pre-commit hooks. |
+| Tests | `pytest` + `requests-mock` | Intercepts `requests.Session` calls; no network, no real account. |
 
 ---
 
 ## Test Structure
 
-`tests/test_dns_nicmanager.py` contains two test classes:
+| File | Covers |
+| --- | --- |
+| `tests/test_dns_nicmanager.py` · `AuthenticatorTest` | Credential validation, `_perform`/`_cleanup` wiring (client mocked) |
+| `tests/test_dns_nicmanager.py` · `NicmanagerClientTest` | The HTTP client against `requests_mock`: zone walk, 401/403/404 handling, retries and their warnings, TOTP header, cleanup by id |
+| `tests/test_docs_boundary.py` | Builds the sdist: `docs/` ships, `docs-tech/` does not; Markdown links resolve |
 
-- `AuthenticatorTest` — extends `dns_test_common.BaseAuthenticatorTest`; mocks
-  `_get_client` to verify that `_perform` and `_cleanup` call the correct client
-  methods with the correct arguments, without hitting the network.
-
-- `NicmanagerClientTest` — tests `_NicmanagerClient` in isolation using
-  `requests_mock.Mocker()`. Covers: successful create, zone-walk on 404, zone-
-  walk on 403, configured-zone short-circuit, 401 propagation, all-candidates-
-  fail error, delete by remembered id, delete with no stored id (no-op), and
-  delete error swallowing.
-
-Coverage is measured with `pytest-cov` and reported on every run.
+Coverage is measured with `pytest-cov`; below 85 % fails the run.

@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The documentation said an unquoted `#` in the password makes Certbot report
+  `dns_nicmanager_password is required`. That happens only when `#` is the
+  first character; anywhere else the password is cut at the `#`, the API answers
+  `401`, and repeated runs lock the IP. Now documented as measured.
+
+### Added
+- Operator documentation split by task: [account setup](docs/ACCOUNT.md),
+  [configuration](docs/CONFIGURATION.md) (every key and argument, renewal,
+  installing next to Certbot), and [troubleshooting](docs/TROUBLESHOOTING.md)
+  with every plugin log message explained.
+- README: sequence diagram of the challenge flow, comparison with lego, German
+  summary.
+- Maintainer documentation: API behaviour the code relies on, release and
+  dependency process (`docs-tech/`).
+- Tests: every Markdown link and anchor resolves (including this repository's
+  absolute links in the README), and every doc page is linked from its index.
+
+### Fixed
 - **The cleanup warning was untested.** When a delete fails, the warning naming
   zone and record id is the operator's only way to find the leftover record;
   demoting it to debug level passed every test. The test now asserts it.

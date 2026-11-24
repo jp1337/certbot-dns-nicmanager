@@ -38,22 +38,22 @@ pip install pre-commit && pre-commit install
   entry point are public. `_NicmanagerClient` and the `_internal` package are
   implementation details (leading underscore is intentional).
 - Match the existing style; `ruff` enforces formatting and import order.
+- Documentation goes where its reader is: `docs/` for people running the plugin
+  (ships to PyPI), `docs-tech/` for maintainers (never published). A test
+  enforces the boundary.
 - Add or update tests for any behaviour change.
 - Update `CHANGELOG.md` (under `[Unreleased]`) and, for design changes, add an
   ADR in `docs-tech/decisions/`.
-- Understand the design first: see [`docs-tech/ARCHITECTURE.md`](docs-tech/ARCHITECTURE.md)
-  and the [ADRs](docs-tech/decisions/). API quirks are documented in
-  [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+- Understand the design first: [`docs-tech/`](docs-tech/README.md) has the
+  architecture, the ADRs and the API behaviour the code relies on.
 
 ## Reporting bugs
 
 Open an issue with: certbot version, plugin version, Python version, the exact
 command, and the relevant log (with secrets redacted). For API authentication
-failures, check `docs/TROUBLESHOOTING.md` first — the `401`/`403` distinction
+failures, check [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) first — the `401`/`403` distinction
 usually points straight at the cause.
 
 ## Releases
 
-Releases are cut by maintainers: bump the version in `pyproject.toml`, finalise
-`CHANGELOG.md`, then push a `vX.Y.Z` tag. The `publish.yml` workflow builds,
-tests, and publishes to PyPI via Trusted Publishing.
+Maintainers only: [`docs-tech/RELEASING.md`](docs-tech/RELEASING.md).

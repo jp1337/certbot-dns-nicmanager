@@ -39,9 +39,9 @@ pip install pre-commit && pre-commit install
 - Match the existing style; `ruff` enforces formatting and import order.
 - Add or update tests for any behaviour change.
 - Update `CHANGELOG.md` (under `[Unreleased]`) and, for design changes, add an
-  ADR in `docs/decisions/`.
-- Understand the design first: see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-  and the [ADRs](docs/decisions/). API quirks are documented in
+  ADR in `docs-tech/decisions/`.
+- Understand the design first: see [`docs-tech/ARCHITECTURE.md`](docs-tech/ARCHITECTURE.md)
+  and the [ADRs](docs-tech/decisions/). API quirks are documented in
   [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ## Reporting bugs

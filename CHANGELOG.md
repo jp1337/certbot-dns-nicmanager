@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **2FA secrets were rejected with pyotp 2.12.** pyotp 2.12 (released
+  2026-11-15) refuses TOTP secrets under 112 bits, so a fresh install rejected the
+  common 80-bit (16-character) secret at startup: "Secrets must be at least 112
+  bits after decoding". The secret is issued by nicmanager, not chosen by the
+  operator, so the plugin now accepts secrets from 80 bits up; shorter ones are
+  still rejected as a truncated paste. Requires `pyotp>=2.12.1` (2.12.0 has no way
+  to lower the limit).
+- `SECURITY.md` still told operators to disable 2FA on the automation account.
+
+### Changed
+- Tested on Python 3.14 and 3.15.
+- Package metadata uses an SPDX licence expression; the old TOML table stops
+  building with setuptools after 2027-02-18.
+- Dependency updates move from Dependabot to Renovate (GitHub Actions pinned to
+  commit digests, pre-commit hooks covered). A weekly CI run against the newest
+  dependency versions catches breaking upstream releases like the pyotp one.
+
 ## [1.1.0] - 2026-07-13
 
 ### Added

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["after 2am and before 5am"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 4,
+  "labels": ["renovate", "dependencies"],
+  "reviewers": ["jp1337"],
+  "rebaseWhen": "conflicted",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "pre-commit": {
+    "description": "Off by default in Renovate. The hook revs in .pre-commit-config.yaml sat untouched under Dependabot, which has no pre-commit support.",
+    "enabled": true
+  },
+  "vulnerabilityAlerts": {
+    "description": "A fix for a known vulnerability does not wait for the nightly window. GitHub's 'Dependabot security updates' setting is switched off so one tool raises the pull request rather than two; the alerts themselves stay on — they are what this reads.",
+    "enabled": true,
+    "schedule": ["at any time"],
+    "labels": ["renovate", "security"],
+    "semanticCommitType": "fix"
+  },
+  "packageRules": [
+    {
+      "description": "The runtime dependencies are open '>=' floors, as a library's must be: new releases install without a pull request. What catches a breaking release is the weekly scheduled CI run against the newest versions (ci.yml), not Renovate — pyotp 2.12 broke 2FA secrets that way in November 2026.",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["project.dependencies"],
+      "automerge": false,
+      "labels": ["renovate", "needs-review"]
+    },
+    {
+      "description": "GitHub Actions and pre-commit hooks in one PR each. Non-major updates merge themselves once CI is green: the workflows are what validates the change, and neither reaches users.",
+      "matchManagers": ["github-actions", "pre-commit"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "semanticCommitScope": "ci",
+      "labels": ["renovate", "dependencies", "ci"]
+    },
+    {
+      "matchManagers": ["pre-commit"],
+      "groupName": "pre-commit hooks",
+      "semanticCommitScope": "dev"
+    }
+  ]
+}

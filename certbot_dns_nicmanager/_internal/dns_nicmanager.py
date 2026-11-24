@@ -50,6 +50,17 @@ def _normalize_totp_secret(secret: str) -> str:
     return secret.replace(" ", "").upper()
 
 
+class _ProviderTOTP(pyotp.TOTP):
+    """TOTP that accepts the secret length the provider actually issues.
+
+    pyotp >= 2.12 refuses secrets under 112 bits, but the secret is issued by
+    nicmanager, not chosen here: an 80-bit (16-character) secret is common and
+    must keep working. Anything shorter is still rejected as a truncated paste.
+    """
+
+    min_secret_length_bits = 80
+
+
 class Authenticator(dns_common.DNSAuthenticator):
     """DNS Authenticator for nicmanager AnycastDNS.
 
@@ -107,7 +118,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         totp_secret = credentials.conf("totp_secret")
         if totp_secret:
             try:
-                pyotp.TOTP(_normalize_totp_secret(totp_secret)).now()
+                _ProviderTOTP(_normalize_totp_secret(totp_secret)).now()
             except (binascii.Error, ValueError) as e:
                 raise errors.PluginError(
                     f"{credentials.confobj.filename}: dns_nicmanager_totp_secret is "
@@ -165,7 +176,7 @@ class _NicmanagerClient:
         # When 2FA is enabled the API requires a fresh TOTP code per request
         # (see _request). None means the account has no 2FA.
         self._totp = (
-            pyotp.TOTP(_normalize_totp_secret(totp_secret)) if totp_secret else None
+            _ProviderTOTP(_normalize_totp_secret(totp_secret)) if totp_secret else None
         )
         # Maps a (record name, record value) pair to the (zone, record_id) tuple
         # that was created for it, so cleanup can delete it again by numeric id.

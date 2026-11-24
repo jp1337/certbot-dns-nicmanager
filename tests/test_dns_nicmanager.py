@@ -21,7 +21,8 @@ RECORD_NAME = "_acme-challenge." + DOMAIN
 SUB_RECORD = "_acme-challenge.sub." + DOMAIN
 RECORD_CONTENT = "token-validation-value"
 RECORD_ID = 16420
-# A valid base32 secret (the canonical pyotp example key).
+# A valid base32 secret (the canonical pyotp example key). 80 bits: shorter than
+# pyotp >= 2.12's own 112-bit floor, which the plugin must not inherit.
 TOTP_SECRET = "JBSWY3DPEHPK3PXP"
 
 
@@ -136,6 +137,20 @@ class AuthenticatorTest(
                 "nicmanager_username": USERNAME,
                 "nicmanager_password": PASSWORD,
                 "nicmanager_totp_secret": "not-base32-!!!",
+            },
+            bad,
+        )
+        self.config.nicmanager_credentials = bad
+        with pytest.raises(errors.PluginError):
+            self.auth._setup_credentials()  # noqa: SLF001
+
+    def test_setup_credentials_rejects_truncated_totp_secret(self):
+        bad = os.path.join(self.tempdir, "shorttotp.ini")
+        dns_test_common.write(
+            {
+                "nicmanager_username": USERNAME,
+                "nicmanager_password": PASSWORD,
+                "nicmanager_totp_secret": TOTP_SECRET[:8],  # 40 bits
             },
             bad,
         )

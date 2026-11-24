@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-24
+
+Documentation and packaging only; the plugin code is unchanged.
+
+### Fixed
+- **Links on the PyPI page were dead.** The README used repository-relative
+  links (`LICENSE.txt`, `docs/TROUBLESHOOTING.md`, …), which PyPI cannot
+  resolve. All links are absolute now.
+
+### Changed
+- README reworked: quick start, feature list, badges.
+- GitHub Actions are pinned to commit digests; pre-commit hooks updated
+  (ruff 0.17, mypy 2.4, pre-commit-hooks 6).
+
+### Added
+- A test builds the sdist and fails if the maintainer documentation in
+  `docs-tech/` would ship to PyPI, or if `docs/TROUBLESHOOTING.md` would not.
+
 ## [1.1.1] - 2026-11-24
 
 ### Fixed
@@ -167,7 +185,8 @@ renewal via certbot's systemd timer).
   with a name/content lookup fallback.
 - Test suite covering create, delete, zone walking, and API error handling.
 
-[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.1...v1.0.2

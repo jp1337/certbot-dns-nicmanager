@@ -2,10 +2,29 @@
 
 [![CI](https://github.com/jp1337/certbot-dns-nicmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jp1337/certbot-dns-nicmanager/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/certbot-dns-nicmanager.svg)](https://pypi.org/project/certbot-dns-nicmanager/)
+[![Python](https://img.shields.io/pypi/pyversions/certbot-dns-nicmanager.svg)](https://pypi.org/project/certbot-dns-nicmanager/)
+[![Downloads](https://img.shields.io/pypi/dm/certbot-dns-nicmanager.svg)](https://pypistats.org/packages/certbot-dns-nicmanager)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.txt)
 
-> **Status:** stable (1.0). Running in production — wildcard issuance + automatic
-> renewal against the live nicmanager AnycastDNS API.
+**Wildcard Let's Encrypt certificates for domains on nicmanager AnycastDNS — fully
+automatic, renewal included.**
+
+```bash
+pip install certbot-dns-nicmanager
+certbot certonly --authenticator dns-nicmanager \
+  --dns-nicmanager-credentials ~/.secrets/certbot/nicmanager.ini \
+  -d 'example.com' -d '*.example.com'
+```
+
+- **Wildcard certificates** via the `dns-01` challenge, no inbound port needed.
+- **Least privilege:** works with nicmanager's restricted API-ACME account, which
+  can touch nothing but the `_acme-challenge` record — it does not even need to
+  read the zone.
+- **Two-factor authentication (TOTP)** supported.
+- **Clean up by id:** the challenge record is deleted by the id the API returned;
+  if that fails, zone and id are logged for manual removal.
+- **Small and tested:** three runtime dependencies, typed, ~95 % test coverage,
+  running in production since June 2026.
 
 A [Certbot](https://certbot.eff.org/) DNS authenticator plugin for
 [nicmanager](https://www.nicmanager.com/) **AnycastDNS**. It automates the
@@ -32,10 +51,9 @@ per-host `http-01` certificate would expose.
 pip install certbot-dns-nicmanager
 ```
 
-> Install the plugin into the **same** Python environment as Certbot. If you
-> installed Certbot via `snap`, install the plugin with
-> `snap install certbot-dns-nicmanager` once it is published there, or run
-> Certbot from a `pip` environment that contains both packages.
+> Install the plugin into the **same** Python environment as Certbot. There is no
+> `snap` package; if your Certbot came from `snap`, run Certbot from a `pip`
+> environment that contains both packages instead.
 
 Verify it is registered:
 
@@ -91,9 +109,6 @@ dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
 The `username` is `login.username` (or the account email). Zone detection works
 without any read access, so `dns_nicmanager_zone` is only needed in unusual
 multi-zone-suffix setups.
-
-The `username` is either `login.username` or the account email address, as
-configured in nicmanager.
 
 Protect this file:
 
@@ -177,8 +192,8 @@ mypy certbot_dns_nicmanager
 ```
 
 For the design and the reasoning behind it, see
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the Architecture Decision
-Records in [`docs/decisions/`](docs/decisions/) (DNS-01-only, zone resolution
+[`docs-tech/ARCHITECTURE.md`](docs-tech/ARCHITECTURE.md) and the Architecture Decision
+Records in [`docs-tech/decisions/`](docs-tech/decisions/) (DNS-01-only, zone resolution
 without zone reads, and the basic-auth username / cleanup-by-id decisions).
 
 ## License

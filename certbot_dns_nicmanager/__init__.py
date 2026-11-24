@@ -37,9 +37,9 @@ Other modules               –
 
 Such an account can only touch the ``_acme-challenge.<zone>`` TXT record, so a
 leaked credential cannot be used to hijack other DNS records, transfer domains,
-or read account data. Two-factor authentication (TOTP) must be **disabled** on
-the account used for automation, as the API would otherwise require a rotating
-token that cannot be supplied unattended.
+or read account data. Two-factor authentication (TOTP) is supported: set
+``dns_nicmanager_totp_secret`` to the account's base32 secret and the plugin
+sends a fresh code with every request. The host clock must be accurate (NTP).
 
 .. code-block:: ini
    :name: credentials.ini
@@ -49,6 +49,8 @@ token that cannot be supplied unattended.
    dns_nicmanager_username = mylogin.acmeuser
    # Quote the password if it contains '#' (otherwise read as an INI comment).
    dns_nicmanager_password = "0123456789abcdef0123456789abcdef"
+   # Only if the account has 2FA enabled:
+   # dns_nicmanager_totp_secret = JBSWY3DPEHPK3PXP
 
 The path to this file can be provided interactively or using the
 ``--dns-nicmanager-credentials`` command-line argument. Certbot records the path

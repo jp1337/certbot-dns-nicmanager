@@ -1,21 +1,24 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "certbot-dns-nicmanager"
-version = "1.1.0"
-description = "nicmanager AnycastDNS Authenticator plugin for Certbot"
+version = "1.1.1"
+description = "Certbot DNS-01 plugin for nicmanager AnycastDNS: wildcard Let's Encrypt certificates, 2FA (TOTP) support"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
-authors = [{ name = "Jochen Pylypiw" }]
-keywords = ["certbot", "letsencrypt", "acme", "dns-01", "nicmanager", "dns"]
+license = "Apache-2.0"
+license-files = ["LICENSE.txt", "NOTICE"]
+authors = [{ name = "jp1337" }]
+keywords = [
+    "certbot", "certbot-plugin", "letsencrypt", "acme", "dns-01", "wildcard",
+    "nicmanager", "anycastdns", "internexum", "dns", "ssl", "tls",
+]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Plugins",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -24,6 +27,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Internet :: Name Service (DNS)",
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Security",
     "Topic :: System :: Installation/Setup",
@@ -34,7 +40,7 @@ classifiers = [
 dependencies = [
     "certbot>=2.0.0",
     "requests>=2.32.0",
-    "pyotp>=2.9.0",
+    "pyotp>=2.12.1",
 ]
 
 [project.optional-dependencies]

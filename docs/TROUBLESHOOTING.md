@@ -28,9 +28,9 @@ switched on. `401` means the credentials/username form are being rejected.
 - The basic-auth **username depends on the account's active authentication
   method** (nicmanager Security settings):
   - Method **"E-Mail + Passwort"** → username is the **email**
-    (e.g. `acme@pylypiw.com`).
+    (e.g. `acme@example.com`).
   - Method **login/username** → username is **`login.username`**
-    (e.g. `PrivatPylypiw.acme`, login and username joined by a dot).
+    (e.g. `mylogin.acmeuser`, login and username joined by a dot).
   - Using the *wrong* form returns `401 "Authentication error"` **even with the
     correct password**. This is the single most confusing failure mode — if
     `login.username` gives 401, try the email (or vice versa).

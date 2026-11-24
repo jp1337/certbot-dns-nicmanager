@@ -14,8 +14,9 @@ rather than a public issue. You'll get a response as soon as possible.
 - Use a dedicated, least-privilege **API-ACME account** (rights limited to
   managing the `_acme-challenge.<zone>` TXT record). A leaked credential then
   cannot affect anything beyond the challenge record.
-- Protect the credentials file: `chmod 600`. Disable 2FA on the automation
-  account (a rotating TOTP cannot be supplied unattended).
+- Protect the credentials file: `chmod 600`. It holds the password and, for
+  2FA accounts, the TOTP secret (`dns_nicmanager_totp_secret`): either one alone
+  is not enough to log in, both together are.
 
 ## Scope
 

@@ -33,6 +33,10 @@ MAX_REQUEST_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = 2.0
 RETRY_BACKOFF_CAP_SECONDS = 30.0
 RETRY_AFTER_CAP_SECONDS = 60.0
+# 429 and 503 mean the request was not processed. Any other retried failure (502,
+# 504, read timeout, dropped connection) can arrive after the server already
+# applied it, so a retried POST may leave a duplicate record behind.
+UNPROCESSED_STATUS = frozenset({429, 503})
 
 # When the account has 2FA enabled, nicmanager requires a rotating TOTP code in
 # this header on every request; a request without it returns 401 "Missing 2FA
@@ -48,6 +52,17 @@ def _normalize_totp_secret(secret: str) -> str:
     it contiguous and upper-case.
     """
     return secret.replace(" ", "").upper()
+
+
+class _ProviderTOTP(pyotp.TOTP):
+    """TOTP that accepts the secret length the provider actually issues.
+
+    pyotp >= 2.12 refuses secrets under 112 bits, but the secret is issued by
+    nicmanager, not chosen here: an 80-bit (16-character) secret is common and
+    must keep working. Anything shorter is still rejected as a truncated paste.
+    """
+
+    min_secret_length_bits = 80
 
 
 class Authenticator(dns_common.DNSAuthenticator):
@@ -107,7 +122,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         totp_secret = credentials.conf("totp_secret")
         if totp_secret:
             try:
-                pyotp.TOTP(_normalize_totp_secret(totp_secret)).now()
+                _ProviderTOTP(_normalize_totp_secret(totp_secret)).now()
             except (binascii.Error, ValueError) as e:
                 raise errors.PluginError(
                     f"{credentials.confobj.filename}: dns_nicmanager_totp_secret is "
@@ -165,7 +180,7 @@ class _NicmanagerClient:
         # When 2FA is enabled the API requires a fresh TOTP code per request
         # (see _request). None means the account has no 2FA.
         self._totp = (
-            pyotp.TOTP(_normalize_totp_secret(totp_secret)) if totp_secret else None
+            _ProviderTOTP(_normalize_totp_secret(totp_secret)) if totp_secret else None
         )
         # Maps a (record name, record value) pair to the (zone, record_id) tuple
         # that was created for it, so cleanup can delete it again by numeric id.
@@ -339,6 +354,8 @@ class _NicmanagerClient:
             ) as e:
                 # Transient network error — retry a few times, then give up.
                 if attempt < MAX_REQUEST_ATTEMPTS:
+                    if not isinstance(e, requests.exceptions.ConnectTimeout):
+                        self._warn_possible_duplicate(method, path, e)
                     self._backoff(attempt)
                     continue
                 raise errors.PluginError(
@@ -354,6 +371,10 @@ class _NicmanagerClient:
                 response.status_code in RETRYABLE_STATUS
                 and attempt < MAX_REQUEST_ATTEMPTS
             ):
+                if response.status_code not in UNPROCESSED_STATUS:
+                    self._warn_possible_duplicate(
+                        method, path, f"HTTP {response.status_code}"
+                    )
                 self._backoff(attempt, response)
                 continue
             break
@@ -367,6 +388,17 @@ class _NicmanagerClient:
             return response.json()
         except ValueError:
             return None
+
+    @staticmethod
+    def _warn_possible_duplicate(method: str, path: str, reason: object) -> None:
+        if method == "POST":
+            logger.warning(
+                "Retrying POST %s after %s. If the first attempt was applied, a "
+                "duplicate _acme-challenge TXT record may remain there and need "
+                "manual removal.",
+                path,
+                reason,
+            )
 
     @staticmethod
     def _backoff(attempt: int, response: requests.Response | None = None) -> None:

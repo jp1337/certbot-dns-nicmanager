@@ -48,6 +48,7 @@ test = [
     "pytest>=7.0",
     "pytest-cov",
     "requests-mock",
+    "setuptools>=77",  # tests/test_docs_boundary.py builds the sdist
 ]
 dev = [
     "build",

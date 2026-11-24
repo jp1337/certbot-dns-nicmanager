@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <!-- Source of .github/social-preview.png (GitHub Settings → Social preview).
+       Re-render: magick -density 96 .github/social-preview.svg .github/social-preview.png -->
+  <rect width="1280" height="640" fill="#0d1b2e"/>
+  <g transform="translate(120 200) scale(2.5)">
+    <rect width="96" height="96" rx="22" fill="#1f4e8c"/>
+    <path d="M33 44v-8a15 15 0 0 1 30 0v8" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+    <rect x="24" y="42" width="48" height="36" rx="7" fill="#ffffff"/>
+    <path d="M48 50v20M39.3 55l17.4 10M56.7 55l-17.4 10" stroke="#1f4e8c" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g font-family="DejaVu Sans, Verdana, sans-serif" fill="#ffffff">
+    <text x="420" y="270" font-size="58" font-weight="bold">certbot-dns-nicmanager</text>
+    <text x="420" y="340" font-size="32" fill="#c9d6e8">Wildcard Let's Encrypt certificates</text>
+    <text x="420" y="385" font-size="32" fill="#c9d6e8">for domains on nicmanager AnycastDNS</text>
+    <text x="420" y="455" font-size="24" fill="#6ea8fe">API-ACME account · 2FA (TOTP) · pip install certbot-dns-nicmanager</text>
+  </g>
+</svg>

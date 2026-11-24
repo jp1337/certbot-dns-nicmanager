@@ -26,12 +26,17 @@ pytestmark = pytest.mark.skipif(
 
 
 def _sdist_names(tmp_path: Path) -> list[str]:
-    # Build from the tracked files only, as CI does from a fresh checkout. In the
+    # Build from the repository's files (tracked, or new and not ignored), as CI
+    # does from a fresh checkout. In the
     # working tree setuptools would reuse a stale *.egg-info/SOURCES.txt and ship
     # whatever an earlier build listed there.
     src = tmp_path / "src"
     tracked = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True, text=True
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.split("\0")
     for rel in filter(None, tracked):
         (src / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -81,3 +86,69 @@ def test_operator_docs_do_not_point_into_docs_tech():
     for page in (ROOT / "docs").rglob("*.md"):
         links = re.findall(r"\]\(([^)]*docs-tech[^)]*)\)", page.read_text())
         assert not links, f"{page.relative_to(ROOT)} links into docs-tech/: {links}"
+
+
+# -- links ------------------------------------------------------------------
+
+_SELF = re.compile(
+    r"https://(?:github\.com/jp1337/certbot-dns-nicmanager/(?:blob|tree)/main"
+    r"|raw\.githubusercontent\.com/jp1337/certbot-dns-nicmanager/main)/([^)\s\"#]*)(#[^)\s\"]*)?"
+)
+_LINK = re.compile(r"\]\(([^)\s]+)\)|(?:href|src)=\"([^\"]+)\"")
+
+
+def _slug(heading: str) -> str:
+    # GitHub's anchor rule: lower-case, drop punctuation except - and _, spaces to -.
+    text = re.sub(r"[`*]", "", heading.strip().lower())
+    return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
+
+
+def _anchors(page: Path) -> set[str]:
+    text = re.sub(r"```.*?```", "", page.read_text(), flags=re.S)
+    return {_slug(h) for h in re.findall(r"^#{1,6} (.+)$", text, flags=re.M)}
+
+
+def _markdown_files() -> list[Path]:
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "*.md"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    return [ROOT / p for p in out]
+
+
+def test_every_link_and_anchor_resolves():
+    broken = []
+    for page in _markdown_files():
+        text = re.sub(r"```.*?```", "", page.read_text(), flags=re.S)
+        for m in _LINK.finditer(text):
+            link = m.group(1) or m.group(2)
+            own = _SELF.match(link)
+            if own:
+                target, anchor = ROOT / own.group(1), (own.group(2) or "")
+                if not own.group(1):  # the repository front page
+                    target = ROOT / "README.md"
+            elif re.match(r"[a-z]+:", link):
+                continue  # other sites are out of scope
+            else:
+                path, _, frag = link.partition("#")
+                target = (page.parent / path) if path else page
+                anchor = f"#{frag}" if frag else ""
+            rel = page.relative_to(ROOT)
+            if not target.exists():
+                broken.append(f"{rel}: {link} (no such file)")
+            elif anchor and target.suffix == ".md" and anchor[1:] not in _anchors(target):
+                broken.append(f"{rel}: {link} (no such heading)")
+    assert not broken, "broken links:\n  " + "\n  ".join(broken)
+
+
+def test_every_doc_page_is_reachable_from_its_index():
+    for folder in ("docs", "docs-tech"):
+        index = (ROOT / folder / "README.md").read_text()
+        for page in (ROOT / folder).glob("*.md"):
+            if page.name != "README.md":
+                assert f"({page.name})" in index, (
+                    f"{folder}/README.md does not link {page.name}"
+                )

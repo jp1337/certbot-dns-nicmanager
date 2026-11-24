@@ -31,7 +31,7 @@ cause of unexplained 401 failures.
 
 This distinction was confirmed empirically during a debugging session and is not
 clearly documented in the nicmanager API reference. It is documented in detail
-in [`docs/TROUBLESHOOTING.md`](../../docs/TROUBLESHOOTING.md#authentication).
+in [`docs/ACCOUNT.md`](../../docs/ACCOUNT.md#3-pick-the-right-username-form).
 
 The plugin provides no mechanism to detect or infer which form the account
 requires, because the API gives no indication — both forms go through the same

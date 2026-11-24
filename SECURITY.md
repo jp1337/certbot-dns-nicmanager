@@ -1,5 +1,10 @@
 # Security Policy
 
+## Supported versions
+
+Only the latest release gets fixes. Upgrade with
+`pip install -U certbot-dns-nicmanager`.
+
 ## Reporting a vulnerability
 
 Please report security issues privately via GitHub's

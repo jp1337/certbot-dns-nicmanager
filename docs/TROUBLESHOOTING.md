@@ -1,116 +1,67 @@
-# Troubleshooting & nicmanager API notes
+# Troubleshooting
 
-nicmanager publishes no dedicated documentation for its ACME / DNS API beyond
-the generic [API reference](https://api.nicmanager.com/docs/v1/). This page
-captures real-world behaviour learned while building and operating this plugin,
-so you don't have to rediscover it the hard way.
+Certbot writes everything the plugin logs to
+`/var/log/letsencrypt/letsencrypt.log`; add `-v` for more detail on screen.
 
-## HTTP status decoder
+## API responses
 
-What the API actually returns, and what it means:
-
-| Response | Meaning | What to do |
+| Response | Meaning | Fix |
 | --- | --- | --- |
-| `202` | Record created/deleted | Success. |
-| `401 {"message":"Authentication error"}` | Wrong **username form** (account auth-method mismatch) or wrong password | Use the username that matches the account's *active authentication method* — see [Authentication](#authentication). Verify the password. |
-| `401 {"message":"Authorization error: Too many invalid attempts!"}` | Rate limit after several failed logins | **Stop.** Wait for it to clear. Do not keep trying. |
-| `403 {"message":"Authorization error: API usage not allowed"}` | **Auth succeeded**, but API access is not enabled for the account | Contact nicmanager support and ask them to enable API access for the account. |
-| `000` / no HTTP response (curl hangs/times out) | Source IP **firewall-blocked** at the network level after too many failed attempts | **Stop all attempts.** The block is per-IP and network-level; it clears with time. |
+| `401 Authentication error` | Wrong username form or password | Username form must match the account's authentication method — see [Account](ACCOUNT.md#3-pick-the-right-username-form). A `#` in the password must be [quoted](CONFIGURATION.md#the--in-passwords) |
+| `401 Missing 2FA token header (X-Auth-Token)` | Account has 2FA, no secret configured | Set `dns_nicmanager_totp_secret` |
+| `403 Authorization error: API usage not allowed` | Login works, API access is off | Ask nicmanager support to enable API access |
+| `401 Too many invalid attempts!` | Too many failed logins | **Stop** — see [lockout](#lockout-after-failed-logins) |
+| no response at all, timeouts | Source IP blocked at network level | **Stop** — see [lockout](#lockout-after-failed-logins) |
 
-The `401` → `403` distinction is the key diagnostic: `403 "API usage not
-allowed"` means your credentials are **correct** and you only need API access
-switched on. `401` means the credentials/username form are being rejected.
+`401` means the credentials are rejected; `403 "API usage not allowed"` means
+they are **correct** and only the API permission is missing.
 
-## Authentication
+## Lockout after failed logins
 
-- HTTP **Basic auth** against `https://api.nicmanager.com/v1`. Password is sent
-  in plain text. (lego's `nicmanager` provider does exactly the same.)
-- The basic-auth **username depends on the account's active authentication
-  method** (nicmanager Security settings):
-  - Method **"E-Mail + Passwort"** → username is the **email**
-    (e.g. `acme@example.com`).
-  - Method **login/username** → username is **`login.username`**
-    (e.g. `mylogin.acmeuser`, login and username joined by a dot).
-  - Using the *wrong* form returns `401 "Authentication error"` **even with the
-    correct password**. This is the single most confusing failure mode — if
-    `login.username` gives 401, try the email (or vice versa).
-- **Two-factor authentication (TOTP) is supported** (since v1.1.0). If the account
-  has 2FA enabled, set `dns_nicmanager_totp_secret` to its base32 secret; the
-  plugin sends a fresh code in the `X-Auth-Token` header per request. Without it a
-  2FA account returns `401 "Missing 2FA token header (X-Auth-Token)"`. The host
-  clock must be accurate (NTP) — a skewed clock makes every generated code
-  invalid, and invalid codes count toward the throttle below.
+nicmanager blocks the **source IP** after a handful of failed logins: first
+`401 "Too many invalid attempts!"`, then the API stops answering. The block is
+per IP and clears with time; the portal cannot lift it.
 
-## Do NOT brute-force credentials
+- Never loop over username or password variants.
+- Check the account settings in the portal, then try once.
+- With 2FA: check the clock (`timedatectl`). A skewed clock fails every code.
 
-nicmanager firewall-blocks the **source IP** after a handful of failed logins.
-It escalates: first `401 "Too many invalid attempts"`, then a network-level
-block where the API stops responding entirely (curl returns `000`). The block
-is per-IP and time-based; you cannot clear it from the portal.
+## Plugin messages
 
-Practical consequence: **do not loop over username/password variants.** Make at
-most one careful probe, then verify the account settings in the portal before
-trying again. If you've locked yourself out, switch to a different source IP or
-wait.
+| Message | Meaning | Action |
+| --- | --- | --- |
+| `Could not create the ACME challenge record for … in any candidate zone` | Every candidate zone answered 403/404 | The account may not manage this domain, or set [`dns_nicmanager_zone`](CONFIGURATION.md#when-to-set-dns_nicmanager_zone) |
+| `nicmanager API access is not enabled for this account` | 403 "API usage not allowed" | Ask support to enable API access |
+| `dns_nicmanager_totp_secret is not a valid base32 TOTP secret` | Typo, or the secret is shorter than 16 characters | Copy the secret again from the portal |
+| `dns_nicmanager_endpoint must be an https:// URL` | Plain-HTTP endpoint configured | Use `https://` or remove the line |
+| `Error communicating with the nicmanager API` | Network error after three attempts | Check connectivity to `api.nicmanager.com` |
+| `Could not delete TXT record … in zone … (id …)` | Cleanup failed; the certificate is fine | [Remove the record](#leftover-challenge-records) |
+| `… nicmanager returned no id; automatic cleanup will not be possible` | Record created, id missing in the answer | [Remove the record](#leftover-challenge-records) after the run |
+| `Retrying POST … a duplicate _acme-challenge TXT record may remain` | A create timed out and was retried | Check the zone for a second record after the run |
+| `No stored record id for …; skipping cleanup` | The create had failed or returned no id | Nothing to clean up from this run |
 
-## The API-ACME (challenge-only) account
+## Leftover challenge records
 
-The recommended account type — "API-ACME-Account (Nur ACME-Challenge)" — is
-restricted to managing the `_acme-challenge.<zone>` TXT record and nothing else:
+A leftover `_acme-challenge` TXT record does no harm: its token is single-use
+and Let's Encrypt ignores records it did not ask for. To tidy up, delete it in
+the nicmanager portal under the zone's DNS records; the log line names zone and
+record id.
 
-| Module | Rights |
-| --- | --- |
-| Webfrontend | – |
-| Account settings | – |
-| Domains | – |
-| Nameserver | View, Manage (create, edit, delete) |
-| Domainsecurity | – |
-| Other modules | – |
+## Validation fails although the record was created
 
-Crucially, **this account cannot read zones** — `GET /anycast/{zone}` returns
-401/403. That is why this plugin never reads zones: it resolves the owning zone
-by attempting the record *create* against each candidate (most-specific first)
-and using the first that succeeds. See `add_txt_record` in
-`certbot_dns_nicmanager/_internal/dns_nicmanager.py`.
+`Incorrect TXT record` or `No TXT record found` after `Created TXT record` in
+the log: the CA looked before the record reached all nameservers. Raise
+`--dns-nicmanager-propagation-seconds`, e.g. to `120`.
 
-## Credentials file gotcha: `#` in the password
+## Certificates now, API access later
 
-certbot reads the INI with `configobj`, which treats an unquoted `#` as the
-start of a comment. If your password contains `#`, **quote it**:
+Until API access is enabled you can issue by hand:
+`certbot certonly --manual --preferred-challenges dns -d example.com -d '*.example.com'`
+and add the TXT records in the portal.
 
-```ini
-dns_nicmanager_password = "p#ssw0rd#with#hashes"
-```
+A certificate for `example.com` **and** `*.example.com` asks for **two** values
+at the same name `_acme-challenge.example.com`. Both must exist at the same time
+as two separate TXT records — add the second, do not replace the first.
 
-Symptom if you forget: certbot reports `dns_nicmanager_password is required`
-even though the line is present.
-
-## API endpoints used (AnycastDNS, v1)
-
-| Operation | Request |
-| --- | --- |
-| Create | `POST /v1/anycast/{zone}/records` — body `{"name","type":"TXT","value","ttl"}` (ttl 900–2147483647) → `202` with `{"id",...}` |
-| Delete | `DELETE /v1/anycast/{zone}/records/{id}` → `202` |
-
-`{zone}` accepts the zone name (e.g. `example.com`) or its numeric id. The
-record `name` is the full node name (e.g. `_acme-challenge.example.com`), as in
-nicmanager's own create example. The create response's numeric `id` is what you
-need to delete the record afterwards.
-
-## Manual fallback while the API is unavailable
-
-If API access isn't enabled yet but you need certs now, you can issue manually
-with `certbot --manual --preferred-challenges dns` and add the TXT records by
-hand in the nicmanager UI. One sharp edge:
-
-> A `-d example.com -d *.example.com` certificate produces **two** challenges,
-> both at `_acme-challenge.example.com` but with **different values**. Both
-> values must exist **simultaneously** as two separate TXT records when Let's
-> Encrypt validates. Add the second value as an additional record — do **not**
-> replace the first.
-
-(Let's Encrypt may reuse a recently-validated authorization, in which case only
-one challenge appears — but don't rely on it.)
-
-Manually issued certificates do **not** auto-renew; switch back to this plugin
-once API access is enabled.
+Manual certificates do not renew automatically. Once API access works, issue
+again with `--authenticator dns-nicmanager`.

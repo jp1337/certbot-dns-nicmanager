@@ -8,7 +8,7 @@ import pytest
 import requests
 import requests_mock
 from certbot import errors
-from certbot.compat import os
+from certbot.compat import filesystem, os
 from certbot.plugins import dns_test_common
 from certbot.plugins.dns_test_common import DOMAIN
 from certbot.tests import util as test_util
@@ -138,6 +138,32 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.config.nicmanager_credentials = bad
         with pytest.raises(errors.PluginError):
             self.auth._setup_credentials()  # noqa: SLF001
+
+    def _raw_credentials(self, password_line):
+        # Written by hand: dns_test_common.write() quotes values itself, which is
+        # exactly what an operator editing the file does not do.
+        path = os.path.join(self.tempdir, "raw.ini")
+        with open(path, "w") as f:
+            f.write(f"nicmanager_username = {USERNAME}\n{password_line}\n")
+        filesystem.chmod(path, 0o600)
+        self.config.nicmanager_credentials = path
+
+    def test_setup_credentials_rejects_unquoted_hash_in_password(self):
+        # configobj cuts the value at '#': 'p#ss' arrives as 'p', the API answers
+        # 401, and every renewal attempt counts toward nicmanager's IP block.
+        for line in ("nicmanager_password = p#ss", "nicmanager_password = #abc"):
+            self._raw_credentials(line)
+            with pytest.raises(errors.PluginError, match="[Qq]uote"):
+                self.auth._setup_credentials()  # noqa: SLF001
+
+    def test_setup_credentials_accepts_quoted_hash_and_trailing_comment(self):
+        for line in (
+            'nicmanager_password = "p#ss"',
+            "nicmanager_password = 'p#ss'",
+            "nicmanager_password = secret  # rotated in May",
+        ):
+            self._raw_credentials(line)
+            self.auth._setup_credentials()  # noqa: SLF001  (must not raise)
 
     def test_setup_credentials_rejects_truncated_totp_secret(self):
         bad = os.path.join(self.tempdir, "shorttotp.ini")

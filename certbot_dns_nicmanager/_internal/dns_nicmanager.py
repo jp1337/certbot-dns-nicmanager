@@ -2,6 +2,7 @@
 
 import binascii
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -55,6 +56,24 @@ def _normalize_totp_secret(secret: str) -> str:
     return secret.replace(" ", "").upper()
 
 
+def _password_hash_cut(path: str, key: str) -> bool:
+    """Whether an unquoted '#' in the password line cuts the password short.
+
+    configobj reads an unquoted '#' as the start of a comment, so ``p#ss``
+    arrives as ``p``: the API answers 401 and each renewal counts toward
+    nicmanager's IP block. A '#' at the start of the value or directly after a
+    character is taken as part of the password; one after whitespace stays an
+    ordinary trailing comment, so working files with comments keep working.
+    """
+    with open(path, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    m = re.search(rf"^\s*{re.escape(key)}\s*=[ \t]*(.*)$", text, flags=re.M)
+    if not m or m.group(1)[:1] in ("'", '"'):
+        return False
+    value = m.group(1)
+    return value.startswith("#") or re.search(r"\S#", value) is not None
+
+
 class _ProviderTOTP(pyotp.TOTP):
     """TOTP that accepts the secret length the provider actually issues.
 
@@ -105,6 +124,13 @@ class Authenticator(dns_common.DNSAuthenticator):
     ) -> None:
         username = credentials.conf("username")
         password = credentials.conf("password")
+        filename = credentials.confobj.filename
+        if filename and _password_hash_cut(filename, credentials.mapper("password")):
+            raise errors.PluginError(
+                f"{filename}: the password contains '#', which starts a comment "
+                f"unless the value is quoted, so it would be cut short and fail "
+                f'with 401. Quote it: dns_nicmanager_password = "..."'
+            )
         if not username:
             raise errors.PluginError(
                 f"{credentials.confobj.filename}: dns_nicmanager_username is required."

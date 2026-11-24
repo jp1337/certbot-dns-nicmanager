@@ -24,13 +24,14 @@ A commented template: [`examples/nicmanager.ini`](../examples/nicmanager.ini).
 ### The `#` in passwords
 
 Certbot parses the file with `configobj`, where an unquoted `#` starts a
-comment and cuts the value:
+comment and would cut the password short — a `401` on every run, until
+nicmanager blocks the IP. The plugin therefore stops before sending anything:
 
-| In the file | What the plugin sends |
+| In the file | Result |
 | --- | --- |
-| `#abc` | nothing → `dns_nicmanager_password is required` |
-| `p#ss` | `p` → `401 Authentication error`, and repeated runs lock the IP |
-| `"p#ss"` | `p#ss` |
+| `p#ss` or `#abc` | stops: "the password contains '#' … Quote it" |
+| `"p#ss"` or `'p#ss'` | password `p#ss` |
+| `secret  # note` | password `secret`; a `#` after a space is a comment |
 
 Quote the value.
 

@@ -7,11 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-24
+
 ### Fixed
+- **An unquoted `#` in the password no longer walks into nicmanager's IP block.**
+  Certbot's INI parser cuts the value at `#`, so `p#ss` was sent as `p`: a `401`
+  on every renewal until the API blocked the host. The plugin now stops before
+  the first request and says to quote the password. A `#` after a space is still
+  read as a trailing comment, so existing files with comments keep working.
 - The documentation said an unquoted `#` in the password makes Certbot report
   `dns_nicmanager_password is required`. That happens only when `#` is the
   first character; anywhere else the password is cut at the `#`, the API answers
   `401`, and repeated runs lock the IP. Now documented as measured.
+- **The cleanup warning was untested.** When a delete fails, the warning naming
+  zone and record id is the operator's only way to find the leftover record;
+  demoting it to debug level passed every test. The test now asserts it.
+- `CONTRIBUTING.md` said ruff enforces formatting, but CI never ran
+  `ruff format` and three files were unformatted. CI and pre-commit now check it.
+- `docs-tech/ARCHITECTURE.md` still described the pre-1.0.2 cleanup (entry
+  removed before the delete), keyed records by name only, and omitted retries,
+  2FA and the "API usage not allowed" abort.
 
 ### Added
 - Operator documentation split by task: [account setup](docs/ACCOUNT.md),
@@ -24,16 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency process (`docs-tech/`).
 - Tests: every Markdown link and anchor resolves (including this repository's
   absolute links in the README), and every doc page is linked from its index.
-
-### Fixed
-- **The cleanup warning was untested.** When a delete fails, the warning naming
-  zone and record id is the operator's only way to find the leftover record;
-  demoting it to debug level passed every test. The test now asserts it.
-- `CONTRIBUTING.md` said ruff enforces formatting, but CI never ran
-  `ruff format` and three files were unformatted. CI and pre-commit now check it.
-- `docs-tech/ARCHITECTURE.md` still described the pre-1.0.2 cleanup (entry
-  removed before the delete), keyed records by name only, and omitted retries,
-  2FA and the "API usage not allowed" abort.
 
 ## [1.1.2] - 2026-11-24
 
@@ -213,7 +218,8 @@ renewal via certbot's systemd timer).
   with a name/content lookup fallback.
 - Test suite covering create, delete, zone walking, and API error handling.
 
-[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/jp1337/certbot-dns-nicmanager/compare/v1.0.2...v1.1.0

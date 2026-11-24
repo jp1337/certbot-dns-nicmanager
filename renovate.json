@@ -48,6 +48,12 @@
       "labels": ["renovate", "dependencies", "ci"]
     },
     {
+      "description": "setup-python's python-version is a test-matrix entry (3.10 … 3.15), not a pin: each must float to the newest patch release. Renovate would pin it to an exact patch, which the matrix then never refreshes. Adding a new minor to the matrix is a release decision.",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["python"],
+      "enabled": false
+    },
+    {
       "matchManagers": ["pre-commit"],
       "groupName": "pre-commit hooks",
       "semanticCommitScope": "dev"

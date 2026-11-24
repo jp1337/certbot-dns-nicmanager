@@ -1,4 +1,5 @@
 """Tests for certbot_dns_nicmanager._internal.dns_nicmanager."""
+
 import sys
 import unittest
 from unittest import mock
@@ -26,9 +27,7 @@ RECORD_ID = 16420
 TOTP_SECRET = "JBSWY3DPEHPK3PXP"
 
 
-class AuthenticatorTest(
-    test_util.TempDirTestCase, dns_test_common.BaseAuthenticatorTest
-):
+class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthenticatorTest):
     def setUp(self):
         super().setUp()
 
@@ -52,9 +51,7 @@ class AuthenticatorTest(
 
         # Certbot's display service is not configured in unit tests, so silence
         # the "waiting for propagation" notification emitted by perform().
-        notify_patcher = mock.patch(
-            "certbot.plugins.dns_common.display_util.notify"
-        )
+        notify_patcher = mock.patch("certbot.plugins.dns_common.display_util.notify")
         notify_patcher.start()
         self.addCleanup(notify_patcher.stop)
 
@@ -65,9 +62,7 @@ class AuthenticatorTest(
 
     def test_perform(self):
         self.auth.perform([self.achall])
-        expected = [
-            mock.call.add_txt_record(RECORD_NAME, mock.ANY, mock.ANY)
-        ]
+        expected = [mock.call.add_txt_record(RECORD_NAME, mock.ANY, mock.ANY)]
         self.assertEqual(expected, self.mock_client.mock_calls)
 
     def test_cleanup(self):
@@ -454,11 +449,12 @@ class NicmanagerClientTest(unittest.TestCase):
                 f"{ENDPOINT}/anycast/{DOMAIN}/records",
                 [first, {"status_code": 202, "json": {"id": RECORD_ID}}],
             )
-            with mock.patch(
-                "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
-            ), self.assertLogs(
-                "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
-            ) as logs:
+            with (
+                mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"),
+                self.assertLogs(
+                    "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+                ) as logs,
+            ):
                 self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
             self.assertIn(DOMAIN, "\n".join(logs.output))
 
@@ -468,10 +464,11 @@ class NicmanagerClientTest(unittest.TestCase):
             f"{ENDPOINT}/anycast/{DOMAIN}/records",
             [{"status_code": 503}, {"status_code": 202, "json": {"id": RECORD_ID}}],
         )
-        with mock.patch(
-            "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
-        ), self.assertNoLogs(
-            "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+        with (
+            mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"),
+            self.assertNoLogs(
+                "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+            ),
         ):
             self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
 
@@ -566,9 +563,7 @@ class NicmanagerClientTest(unittest.TestCase):
         )
         codes = iter(["111111", "222222"])
         with mock.patch.object(client._totp, "now", side_effect=lambda: next(codes)):
-            with mock.patch(
-                "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
-            ):
+            with mock.patch("certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"):
                 client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
         sent = [r.headers.get("X-Auth-Token") for r in m.request_history]
         self.assertEqual(sent, ["111111", "222222"])
@@ -599,9 +594,7 @@ class NicmanagerClientTest(unittest.TestCase):
             status_code=202,
             json={"id": RECORD_ID},
         )
-        with mock.patch.object(
-            pyotp.TOTP, "now", autospec=True, return_value="424242"
-        ):
+        with mock.patch.object(pyotp.TOTP, "now", autospec=True, return_value="424242"):
             client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
         self.assertEqual(create.last_request.headers.get("X-Auth-Token"), "424242")
 
@@ -678,8 +671,16 @@ class NicmanagerClientTest(unittest.TestCase):
             status_code=500,
             json={"message": "boom"},
         )
-        # Must not raise — cleanup errors should never mask issuance.
-        self.client.del_txt_record(RECORD_NAME, RECORD_CONTENT)
+        # Must not raise — cleanup errors should never mask issuance. The record
+        # stays in the zone, so the warning must say where (zone + id): that is the
+        # operator's only way to find and remove it.
+        with self.assertLogs(
+            "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+        ) as logs:
+            self.client.del_txt_record(RECORD_NAME, RECORD_CONTENT)
+        warning = "\n".join(logs.output)
+        self.assertIn(DOMAIN, warning)
+        self.assertIn(str(RECORD_ID), warning)
 
 
 if __name__ == "__main__":

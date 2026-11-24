@@ -1,4 +1,5 @@
 """DNS Authenticator for nicmanager AnycastDNS."""
+
 import binascii
 import logging
 import time
@@ -259,9 +260,7 @@ class _NicmanagerClient:
             # No stored id (creation failed, or the API returned none). The
             # restricted API-ACME account cannot list records to find it, so
             # there is nothing safe to do here.
-            logger.warning(
-                "No stored record id for %s; skipping cleanup.", record_name
-            )
+            logger.warning("No stored record id for %s; skipping cleanup.", record_name)
             return
 
         zone, record_id = created
@@ -271,8 +270,8 @@ class _NicmanagerClient:
             # Already gone (double cleanup / removed elsewhere) — treat as done.
             logger.info("TXT record %s (id %s) was already gone.", record_name, record_id)
         except errors.PluginError as e:
-            # Keep the id so a later attempt can still find it, and log enough
-            # (zone + id) to locate the orphan for manual removal.
+            # The record stays in the zone and nothing in this run retries the
+            # delete, so the log (zone + id) is the operator's only way to find it.
             logger.warning(
                 "Could not delete TXT record %s in zone %s (id %s): %s — it may "
                 "need manual removal.",
@@ -304,7 +303,7 @@ class _NicmanagerClient:
 
         name = record_name.rstrip(".")
         if name.startswith(ACME_CHALLENGE_PREFIX):
-            name = name[len(ACME_CHALLENGE_PREFIX):]
+            name = name[len(ACME_CHALLENGE_PREFIX) :]
 
         return [g for g in dns_common.base_domain_name_guesses(name) if "." in g]
 

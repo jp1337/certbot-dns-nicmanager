@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The cleanup warning was untested.** When a delete fails, the warning naming
+  zone and record id is the operator's only way to find the leftover record;
+  demoting it to debug level passed every test. The test now asserts it.
+- `CONTRIBUTING.md` said ruff enforces formatting, but CI never ran
+  `ruff format` and three files were unformatted. CI and pre-commit now check it.
+- `docs-tech/ARCHITECTURE.md` still described the pre-1.0.2 cleanup (entry
+  removed before the delete), keyed records by name only, and omitted retries,
+  2FA and the "API usage not allowed" abort.
+
 ## [1.1.2] - 2026-11-24
 
 Documentation and packaging only; the plugin code is unchanged.

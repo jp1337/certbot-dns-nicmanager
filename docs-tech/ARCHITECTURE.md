@@ -2,7 +2,7 @@
 
 This document describes the design of `certbot-dns-nicmanager` for maintainers
 and contributors. For operational troubleshooting, see
-[`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
+[`docs/TROUBLESHOOTING.md`](../docs/TROUBLESHOOTING.md).
 
 ---
 
@@ -165,7 +165,7 @@ Authentication is HTTP Basic. The username form must match the nicmanager
 account's active authentication method: the account email for "E-Mail + Passwort"
 accounts, or `login.username` otherwise. See
 [ADR-003](decisions/ADR-003-basic-auth-username-and-cleanup-by-id.md) and
-[`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md#authentication) for the exact
+[`docs/TROUBLESHOOTING.md`](../docs/TROUBLESHOOTING.md#authentication) for the exact
 rules.
 
 ---

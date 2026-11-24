@@ -21,7 +21,8 @@ RECORD_NAME = "_acme-challenge." + DOMAIN
 SUB_RECORD = "_acme-challenge.sub." + DOMAIN
 RECORD_CONTENT = "token-validation-value"
 RECORD_ID = 16420
-# A valid base32 secret (the canonical pyotp example key).
+# A valid base32 secret (the canonical pyotp example key). 80 bits: shorter than
+# pyotp >= 2.12's own 112-bit floor, which the plugin must not inherit.
 TOTP_SECRET = "JBSWY3DPEHPK3PXP"
 
 
@@ -136,6 +137,20 @@ class AuthenticatorTest(
                 "nicmanager_username": USERNAME,
                 "nicmanager_password": PASSWORD,
                 "nicmanager_totp_secret": "not-base32-!!!",
+            },
+            bad,
+        )
+        self.config.nicmanager_credentials = bad
+        with pytest.raises(errors.PluginError):
+            self.auth._setup_credentials()  # noqa: SLF001
+
+    def test_setup_credentials_rejects_truncated_totp_secret(self):
+        bad = os.path.join(self.tempdir, "shorttotp.ini")
+        dns_test_common.write(
+            {
+                "nicmanager_username": USERNAME,
+                "nicmanager_password": PASSWORD,
+                "nicmanager_totp_secret": TOTP_SECRET[:8],  # 40 bits
             },
             bad,
         )
@@ -429,6 +444,36 @@ class NicmanagerClientTest(unittest.TestCase):
             self.client._created[(RECORD_NAME, RECORD_CONTENT)], (DOMAIN, RECORD_ID)
         )
         slept.assert_called()  # a backoff happened
+
+    @requests_mock.Mocker()
+    def test_post_retry_after_ambiguous_failure_warns_about_duplicate(self, m):
+        # A 504 or read timeout can arrive after the server stored the record; the
+        # retry then creates a second one and only its id is kept for cleanup.
+        for first in ({"status_code": 504}, {"exc": requests.exceptions.ReadTimeout}):
+            m.post(
+                f"{ENDPOINT}/anycast/{DOMAIN}/records",
+                [first, {"status_code": 202, "json": {"id": RECORD_ID}}],
+            )
+            with mock.patch(
+                "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+            ), self.assertLogs(
+                "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+            ) as logs:
+                self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
+            self.assertIn(DOMAIN, "\n".join(logs.output))
+
+    @requests_mock.Mocker()
+    def test_post_retry_after_unprocessed_503_does_not_warn(self, m):
+        m.post(
+            f"{ENDPOINT}/anycast/{DOMAIN}/records",
+            [{"status_code": 503}, {"status_code": 202, "json": {"id": RECORD_ID}}],
+        )
+        with mock.patch(
+            "certbot_dns_nicmanager._internal.dns_nicmanager.time.sleep"
+        ), self.assertNoLogs(
+            "certbot_dns_nicmanager._internal.dns_nicmanager", "WARNING"
+        ):
+            self.client.add_txt_record(RECORD_NAME, RECORD_CONTENT, 900)
 
     @requests_mock.Mocker()
     def test_request_gives_up_after_persistent_5xx(self, m):

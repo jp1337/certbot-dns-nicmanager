@@ -1,6 +1,6 @@
 pkgbase = certbot-dns-nicmanager
 	pkgdesc = Certbot DNS-01 plugin for nicmanager AnycastDNS: wildcard Let's Encrypt certificates, API-ACME account, 2FA
-	pkgver = 1.1.2
+	pkgver = 1.1.3
 	pkgrel = 1
 	url = https://github.com/jp1337/certbot-dns-nicmanager
 	arch = any
@@ -15,7 +15,7 @@ pkgbase = certbot-dns-nicmanager
 	depends = python
 	depends = python-pyotp
 	depends = python-requests
-	source = https://files.pythonhosted.org/packages/source/c/certbot_dns_nicmanager/certbot_dns_nicmanager-1.1.2.tar.gz
-	sha256sums = ab848e338669bfbe27813c051551d6c134559620379f6abe1a0f24115401b224
+	source = https://files.pythonhosted.org/packages/source/c/certbot_dns_nicmanager/certbot_dns_nicmanager-1.1.3.tar.gz
+	sha256sums = 332f028745fd3c05ea0e98657a33cc3ed8fc8ce731a3d915057337bb1639a76a
 
 pkgname = certbot-dns-nicmanager

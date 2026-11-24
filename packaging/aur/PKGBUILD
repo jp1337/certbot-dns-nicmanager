@@ -3,7 +3,7 @@
 
 pkgname=certbot-dns-nicmanager
 _name=certbot_dns_nicmanager
-pkgver=1.1.2
+pkgver=1.1.3
 pkgrel=1
 pkgdesc="Certbot DNS-01 plugin for nicmanager AnycastDNS: wildcard Let's Encrypt certificates, API-ACME account, 2FA"
 arch=('any')
@@ -13,7 +13,7 @@ depends=('certbot' 'python' 'python-pyotp' 'python-requests')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 checkdepends=('python-pytest' 'python-requests-mock')
 source=("https://files.pythonhosted.org/packages/source/${_name::1}/${_name}/${_name}-${pkgver}.tar.gz")
-sha256sums=('ab848e338669bfbe27813c051551d6c134559620379f6abe1a0f24115401b224')
+sha256sums=('332f028745fd3c05ea0e98657a33cc3ed8fc8ce731a3d915057337bb1639a76a')
 
 build() {
   cd "${_name}-${pkgver}"

@@ -90,9 +90,13 @@ def test_operator_docs_do_not_point_into_docs_tech():
 
 # -- links ------------------------------------------------------------------
 
+_REPO = "jp1337/certbot-dns-nicmanager"
+# A link into this repository: a file on main (blob/tree/raw), or the front page
+# itself (which GitHub renders from README.md). Other repository URLs — issues,
+# security advisories, releases — are not files and stay out of scope.
 _SELF = re.compile(
-    r"https://(?:github\.com/jp1337/certbot-dns-nicmanager/(?:blob|tree)/main"
-    r"|raw\.githubusercontent\.com/jp1337/certbot-dns-nicmanager/main)/([^)\s\"#]*)(#[^)\s\"]*)?"
+    rf"https://(?:github\.com/{_REPO}(?:/(?:blob|tree)/main/(?P<path>[^)\s\"#]*)|(?=[#)\s\"]|$))"
+    rf"|raw\.githubusercontent\.com/{_REPO}/main/(?P<raw>[^)\s\"#]*))(?P<anchor>#[^)\s\"]*)?"
 )
 _LINK = re.compile(r"\]\(([^)\s]+)\)|(?:href|src)=\"([^\"]+)\"")
 
@@ -119,23 +123,45 @@ def _markdown_files() -> list[Path]:
     return [ROOT / p for p in out]
 
 
+def _resolve(page: Path, link: str) -> tuple[Path, str] | None:
+    """The local file and anchor a link points at, or None if it is not ours."""
+    own = _SELF.fullmatch(link)
+    if own:
+        rel = own.group("path") if own.group("path") is not None else own.group("raw")
+        target = ROOT / rel if rel is not None else ROOT / "README.md"
+        return target, own.group("anchor") or ""
+    if re.match(r"[a-z]+:", link):
+        return None
+    path, _, frag = link.partition("#")
+    return (page.parent / path) if path else page, f"#{frag}" if frag else ""
+
+
+def test_link_resolution_covers_the_repository_front_page():
+    # The front page is README.md: an anchor on it is checked like any other.
+    # Missed until 1.1.3, so a broken "#compared-to-lego" passed the suite.
+    readme = ROOT / "README.md"
+    front = f"https://github.com/{_REPO}"
+    assert _resolve(readme, f"{front}#compared-to-lego") == (readme, "#compared-to-lego")
+    assert _resolve(readme, front) == (readme, "")
+    assert _resolve(readme, f"{front}/blob/main/docs/README.md") == (
+        ROOT / "docs/README.md",
+        "",
+    )
+    assert _resolve(readme, f"{front}/issues") is None
+    assert _resolve(readme, f"{front}/security/advisories/new") is None
+    assert _resolve(readme, "https://example.com/x#y") is None
+
+
 def test_every_link_and_anchor_resolves():
     broken = []
     for page in _markdown_files():
         text = re.sub(r"```.*?```", "", page.read_text(), flags=re.S)
         for m in _LINK.finditer(text):
             link = m.group(1) or m.group(2)
-            own = _SELF.match(link)
-            if own:
-                target, anchor = ROOT / own.group(1), (own.group(2) or "")
-                if not own.group(1):  # the repository front page
-                    target = ROOT / "README.md"
-            elif re.match(r"[a-z]+:", link):
-                continue  # other sites are out of scope
-            else:
-                path, _, frag = link.partition("#")
-                target = (page.parent / path) if path else page
-                anchor = f"#{frag}" if frag else ""
+            resolved = _resolve(page, link)
+            if resolved is None:
+                continue  # another site, or a repository page that is no file
+            target, anchor = resolved
             rel = page.relative_to(ROOT)
             if not target.exists():
                 broken.append(f"{rel}: {link} (no such file)")
@@ -152,3 +178,21 @@ def test_every_doc_page_is_reachable_from_its_index():
                 assert f"({page.name})" in index, (
                     f"{folder}/README.md does not link {page.name}"
                 )
+
+
+def test_diagrams_say_the_same_in_svg_and_drawio_model():
+    # A .drawio.svg holds the picture twice: the drawn SVG that GitHub and PyPI
+    # show, and the draw.io model that editing opens. Edit one by hand and the
+    # README shows something the source no longer says.
+    import xml.etree.ElementTree as ET
+
+    svg_ns = "{http://www.w3.org/2000/svg}"
+    for path in (ROOT / "docs").rglob("*.drawio.svg"):
+        root = ET.parse(path).getroot()
+        drawn = {t.text for t in root.iter(svg_ns + "text")}
+        model = {
+            c.get("value") for c in ET.fromstring(root.get("content")).iter("mxCell")
+        } - {None}
+        assert drawn == model, (
+            f"{path.name}: drawn vs draw.io model differ: {drawn ^ model}"
+        )

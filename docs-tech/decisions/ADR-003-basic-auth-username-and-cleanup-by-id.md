@@ -84,8 +84,11 @@ additional API call, storing it is the natural cleanup strategy.
   wildcard simultaneously, which ACME requires two values at the same name).
 
 **Decision (Part B):** `_NicmanagerClient` stores a `(zone, record_id)` tuple
-in `self._created` keyed by the fully-qualified record name at creation time.
-Cleanup pops the entry and issues `DELETE /anycast/{zone}/records/{id}`.
+in `self._created` keyed by `(record name, record value)` at creation time —
+the value is part of the key because of the two same-name records above.
+Cleanup issues `DELETE /anycast/{zone}/records/{id}` and drops the entry once
+the record is gone (`2xx`, or `404` for already deleted). Any other failure
+keeps the record in the zone and logs zone and id for manual removal.
 
 If no id is stored — either because the create failed, or because the API
 response body contained no `id` field — cleanup logs a warning and returns

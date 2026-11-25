@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The link test missed anchors on the repository front page.** 1.1.3 said
+  every link and anchor is checked, but a link such as
+  `https://github.com/jp1337/certbot-dns-nicmanager#compared-to-lego` was
+  skipped: breaking that anchor passed the suite. Front-page links now resolve
+  to `README.md` and their anchors are checked; issue, release and advisory
+  URLs stay out of scope.
+- ADR-003 still said records are keyed by name only and the entry is removed
+  before the delete — the wildcard bug the same ADR warns about.
+
+### Added
+- A test that the challenge-flow diagram says the same in its drawn SVG and in
+  its embedded draw.io model, so a hand edit to one cannot go unnoticed.
+
 ## [1.1.3] - 2026-11-24
 
 ### Fixed

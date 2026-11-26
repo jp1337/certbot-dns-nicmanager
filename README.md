@@ -38,7 +38,8 @@ A [Certbot](https://certbot.eff.org/) plugin for
 [nicmanager](https://www.nicmanager.com/) **AnycastDNS**. It answers the `dns-01`
 challenge through the [nicmanager API](https://api.nicmanager.com/docs/v1/):
 **`*.example.com` certificates, with an account that can touch nothing but the
-challenge record.**
+challenge record.** Listed among Certbot's
+[third-party plugins](https://eff-certbot.readthedocs.io/en/latest/using.html#third-party-plugins).
 
 > 🇩🇪 Let's-Encrypt-Wildcard-Zertifikate für Domains bei nicmanager (InterNexum):
 > Certbot-Plugin für die AnycastDNS-API, mit eingeschränktem API-ACME-Account und

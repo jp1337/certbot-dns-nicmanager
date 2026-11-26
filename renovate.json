@@ -28,8 +28,7 @@
   },
   "packageRules": [
     {
-      "description": "The runtime dependencies are open '>=' floors, as a library's must be: new releases install without a pull request. What catches a breaking release is the weekly scheduled CI run against the newest versions (ci.yml), not Renovate — pyotp 2.12 broke 2FA secrets that way in November 2026.",
-      "matchManagers": ["pep621"],
+      "description": "The runtime dependencies are open '>=' floors, as a library's must be: new releases install without a pull request. What catches a breaking release is the weekly scheduled CI run against the newest versions (ci.yml), not Renovate — pyotp 2.12 broke 2FA secrets that way in November 2026. Matched by depType alone: Renovate reads this pyproject.toml with its poetry manager, not pep621, so a manager filter matched nothing.",
       "matchDepTypes": ["project.dependencies"],
       "automerge": false,
       "labels": ["renovate", "needs-review"]

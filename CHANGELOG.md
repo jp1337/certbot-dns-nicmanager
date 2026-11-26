@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   URLs stay out of scope.
 - ADR-003 still said records are keyed by name only and the entry is removed
   before the delete — the wildcard bug the same ADR warns about.
+- The Renovate rule that holds runtime dependency updates for review matched
+  nothing: it filtered on the `pep621` manager, but Renovate reads this
+  `pyproject.toml` with its `poetry` manager. It now matches on the dependency
+  type alone.
 
 ### Added
 - A test that the challenge-flow diagram says the same in its drawn SVG and in
